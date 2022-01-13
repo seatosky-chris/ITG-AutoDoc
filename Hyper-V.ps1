@@ -35,7 +35,7 @@ $FilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $FlexAssetName).data
  
 write-host "Start documentation process." -foregroundColor green
  
-$VirtualMachines = get-vm | select-object VMName, State, Generation, Path, State, Automatic*, @{n = "Minimum(gb)"; e = { $_.memoryminimum / 1gb } }, @{n = "Maximum(gb)"; e = { $_.memorymaximum / 1gb } }, @{n = "Startup(gb)"; e = { $_.memorystartup / 1gb } }, @{n = "Currently Assigned(gb)"; e = { $_.memoryassigned / 1gb } }, ProcessorCount, @{n = "Uptime (@ last checkin)"; e = { $_.Uptime } }, Status | ConvertTo-Html -Fragment | Out-String
+$VirtualMachines = get-vm | select-object VMName, State, Generation, Path, Automatic*, @{n = "Minimum(gb)"; e = { $_.memoryminimum / 1gb } }, @{n = "Maximum(gb)"; e = { $_.memorymaximum / 1gb } }, @{n = "Startup(gb)"; e = { $_.memorystartup / 1gb } }, @{n = "Currently Assigned(gb)"; e = { $_.memoryassigned / 1gb } }, ProcessorCount, @{n = "Uptime (@ last checkin)"; e = { $_.Uptime } }, Status | ConvertTo-Html -Fragment | Out-String
 $VirtualMachines = "Last updated: $(Get-Date) <br />" + $TableHeader + ($VirtualMachines -replace $TableStyling) + $Whitespace
 $NetworkSwitches = Get-VMSwitch | select-object name, switchtype, NetAdapterInterfaceDescription, AllowManagementOS | convertto-html -Fragment -PreContent "<h4>Network Switches</h4>" | Out-String
 $VMNetworkSettings = Get-VMNetworkAdapter * | Select-Object Name, IsManagementOs, VMName, SwitchName, MacAddress, @{Name = 'IP'; Expression = { $_.IPaddresses -join "," } } | ConvertTo-Html -Fragment -PreContent "<br><h4>VM Network Settings</h4>" | Out-String
