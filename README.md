@@ -20,5 +20,8 @@ This script will document the Hyper-V setup on a server. It must be ran from the
 ### Licensing Overview
 This script will create a license overview that contains a table of all the licenses of a certain type including how many free seats are available. This same overview is built in to the Bluebeam Licensing script. This script can be ran from any device. To set it up you must fill in the IT Glue API key, endpoint url, the customers ITG organization ID, and the ITG base url. Additionally configure the `$LicenseNames` array to include the names of all licenses you want in this overview and a unique `$OverviewDocumentName` name. To create multiple overviews for different license types, create multiple instances of this script. 
 
+### Meraki Licensing
+This script will create and update a Licensing asset for that companies Meraki equipment. This does not need to be setup on a customer server and can be ran from anywhere. This can be setup with a global ITG api key and global Meraki API key and be ran for all customers in one go. It will run through each Meraki organization and try to match them to an ITG organization, if it cannot, you will be prompted to make a match manually. It will then get the license info and devices from Meraki, update the license asset in ITG, and tag the Meraki devices to the license asset.
+
 ### Quick Delete Duplicate Groups
 This is a simple helper script for mass deleting duplicate AD groups as there were a few issues with duplicates when creating the AD Groups autodoc script. This is not an Autodoc script and should not be scheduled. 
