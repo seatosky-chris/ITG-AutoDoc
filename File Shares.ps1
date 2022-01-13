@@ -278,6 +278,9 @@ foreach ($SMBShare in $AllSmbShares) {
 		if (!$RelatedGPO) {
 			$RelatedGPO = $ExistingShare.attributes.traits."related-gpo"
 		}
+		if (!$GPODriveMap -and $ExistingShare.attributes.traits."share-path" -and $ExistingShare.attributes.traits."share-path" -like "*$($SharePath), *" ) {
+			$SharePath = $ExistingShare.attributes.traits."share-path"
+		}
 
 		$FlexAssetBody = 
 		@{
