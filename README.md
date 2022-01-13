@@ -23,5 +23,7 @@ This script will create a license overview that contains a table of all the lice
 ### Meraki Licensing
 This script will create and update a Licensing asset for that companies Meraki equipment. This does not need to be setup on a customer server and can be ran from anywhere. This can be setup with a global ITG api key and global Meraki API key and be ran for all customers in one go. It will run through each Meraki organization and try to match them to an ITG organization, if it cannot, you will be prompted to make a match manually. It will then get the license info and devices from Meraki, update the license asset in ITG, and tag the Meraki devices to the license asset.
 
+If you are running this from the Task Scheduler, be sure to set the Action's "Start In" value to the location that the script is running from. This is required for relative path references for the forms and json matching file.
+
 ### Quick Delete Duplicate Groups
 This is a simple helper script for mass deleting duplicate AD groups as there were a few issues with duplicates when creating the AD Groups autodoc script. This is not an Autodoc script and should not be scheduled. 
