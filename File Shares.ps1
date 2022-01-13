@@ -89,29 +89,37 @@ while ($i -le 10 -and ($ExistingGroups | Measure-Object).Count -eq (($i-1) * 200
 }
 
 # Get DFS Namespaces
-$DFSNs = Get-DfsnRoot -erroraction 'silentlycontinue' | Where-Object { $_.State -eq "Online" }
-$DFSNs | Add-Member -MemberType NoteProperty -Name TargetPaths -Value $null
-$DFSns | ForEach-Object {
-	$_.TargetPaths = @((Get-DfsnRootTarget -Path $_.Path | Where-Object { $_.State -eq "Online" } | Select-Object TargetPath).TargetPath)
+If (Get-Module -ListAvailable -Name "DFSN") {
+	$DFSNs = Get-DfsnRoot -erroraction 'silentlycontinue' | Where-Object { $_.State -eq "Online" }
+	$DFSNs | Add-Member -MemberType NoteProperty -Name TargetPaths -Value $null
+	$DFSns | ForEach-Object {
+		$_.TargetPaths = @((Get-DfsnRootTarget -Path $_.Path | Where-Object { $_.State -eq "Online" } | Select-Object TargetPath).TargetPath)
+	}
+} else {
+	$DFSNs = $false
 }
 
 # Get all drive mapping GPOs
-$GPOs = Get-GPO -All | Where-Object { $GPOID = $_.Id; $GPODom = $_.DomainName; $GPODisp = $_.DisplayName; Test-Path "\\$($GPODom)\SYSVOL\$($GPODom)\Policies\{$($GPOID)}\User\Preferences\Drives\Drives.xml" }
-$GPOs | Add-Member -MemberType NoteProperty -Name DriveMappings -Value @()
-$GPOs | ForEach-Object {
-	$GPOID = $_.Id; $GPODom = $_.DomainName; $GPODisp = $_.DisplayName;
-	[xml]$DriveXML = Get-Content "\\$($GPODom)\SYSVOL\$($GPODom)\Policies\{$($GPOID)}\User\Preferences\Drives\Drives.xml"
-	foreach ($drivemap in $DriveXML.Drives.Drive) {
-		$_.DriveMappings += New-Object PSObject -Property @{
-			GPOName = $GPODisp
-			DriveLetter = $drivemap.Properties.Letter + ":"
-			DrivePath = $drivemap.Properties.Path
-			DriveAction = $drivemap.Properties.action.Replace("U","Update").Replace("C","Create").Replace("D","Delete").Replace("R","Replace")
-			DriveLabel = $drivemap.Properties.label
-			DrivePersistent = $drivemap.Properties.persistent.Replace("0","False").Replace("1","True")
-			DriveFilterGroup = $drivemap.Filters.FilterGroup.Name
+If (Get-Module -ListAvailable -Name "GroupPolicy") {
+	$GPOs = Get-GPO -All | Where-Object { $GPOID = $_.Id; $GPODom = $_.DomainName; $GPODisp = $_.DisplayName; Test-Path "\\$($GPODom)\SYSVOL\$($GPODom)\Policies\{$($GPOID)}\User\Preferences\Drives\Drives.xml" }
+	$GPOs | Add-Member -MemberType NoteProperty -Name DriveMappings -Value @()
+	$GPOs | ForEach-Object {
+		$GPOID = $_.Id; $GPODom = $_.DomainName; $GPODisp = $_.DisplayName;
+		[xml]$DriveXML = Get-Content "\\$($GPODom)\SYSVOL\$($GPODom)\Policies\{$($GPOID)}\User\Preferences\Drives\Drives.xml"
+		foreach ($drivemap in $DriveXML.Drives.Drive) {
+			$_.DriveMappings += New-Object PSObject -Property @{
+				GPOName = $GPODisp
+				DriveLetter = $drivemap.Properties.Letter + ":"
+				DrivePath = $drivemap.Properties.Path
+				DriveAction = $drivemap.Properties.action.Replace("U","Update").Replace("C","Create").Replace("D","Delete").Replace("R","Replace")
+				DriveLabel = $drivemap.Properties.label
+				DrivePersistent = $drivemap.Properties.persistent.Replace("0","False").Replace("1","True")
+				DriveFilterGroup = $drivemap.Filters.FilterGroup.Name
+			}
 		}
 	}
+} else {
+	$GPOs = $false
 }
 
 # Get this servers configuration ID for tagging
@@ -162,15 +170,27 @@ foreach ($SMBShare in $AllSmbShares) {
 	$DiskPath = $SMBShare.Path
 
 	# See if this share is in a DFS namespace, we'll use this info to get mapped drive info
-	$Namespace = $DFSns | Where-Object { $_.TargetPaths -contains $SharePath -or $_.TargetPaths -contains ($SharePath + "$") }
+	if ($DFSNs) {
+		$Namespace = $DFSNs | Where-Object { $_.TargetPaths -contains $SharePath -or $_.TargetPaths -contains ($SharePath + "$") }
+	} else {
+		$Namespace = $false
+	}
 
 	# See if there is a GPO that maps this drive using the share path or a namespace path
 	if ($Namespace.Path) {
-		$GPO = $GPOs | Where-Object { $_.DriveMappings.DrivePath -like $SharePath -or $_.DriveMappings.DrivePath -like ($SharePath + "$") -or $_.DriveMappings.DrivePath -like $Namespace.Path }
-		$GPODriveMap = $GPO.DriveMappings | Where-Object { $_.DrivePath -like $SharePath -or $_.DrivePath -like ($SharePath + "$") -or $_.DrivePath -like $Namespace.Path }
+		if ($GPOs) {
+			$GPO = $GPOs | Where-Object { $_.DriveMappings.DrivePath -like $SharePath -or $_.DriveMappings.DrivePath -like ($SharePath + "$") -or $_.DriveMappings.DrivePath -like $Namespace.Path }
+			$GPODriveMap = $GPO.DriveMappings | Where-Object { $_.DrivePath -like $SharePath -or $_.DrivePath -like ($SharePath + "$") -or $_.DrivePath -like $Namespace.Path }
+		} else {
+			$GPODriveMap = $false
+		}
 	} else {
-		$GPO = $GPOs | Where-Object { $_.DriveMappings.DrivePath -like $SharePath -or $_.DriveMappings.DrivePath -like ($SharePath + "$") }
-		$GPODriveMap = $GPO.DriveMappings | Where-Object { $_.DrivePath -like $SharePath -or $_.DrivePath -like ($SharePath + "$") }
+		if ($GPOs) {
+			$GPO = $GPOs | Where-Object { $_.DriveMappings.DrivePath -like $SharePath -or $_.DriveMappings.DrivePath -like ($SharePath + "$") }
+			$GPODriveMap = $GPO.DriveMappings | Where-Object { $_.DrivePath -like $SharePath -or $_.DrivePath -like ($SharePath + "$") }
+		} else {
+			$GPODriveMap = $false
+		}
 	}
 	
 	if ($GPODriveMap) {
