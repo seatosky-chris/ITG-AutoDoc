@@ -448,10 +448,13 @@ function UpdateGroupAsset {
 	}
 
 	$ConfigurationDetails = ""
+	$CreatedOn = $null
 	if ($GroupType -eq 'Microsoft 365 Group') {
 		$ConfigurationDetails = "Visibility: " + $Group.Visibility
+		$CreatedOn = $Group.CreatedDateTime
 	} elseif ($GroupType -eq 'Distribution List') {
 		$ConfigurationDetails = "Allow external senders: " + !$Group.RequireSenderAuthenticationEnabled
+		$CreatedOn = $Group.WhenCreated
 	} elseif ($GroupType -eq 'Shared Mailbox') {
 		if ($Group.DeliverToMailboxAndForward) {
 			$ConfigurationDetails += "Email forwarding enabled.`n"
@@ -464,6 +467,18 @@ function UpdateGroupAsset {
 		if ($Group.MessageCopyForSendOnBehalfEnabled) {
 			$ConfigurationDetails += '✓ Copy items sent on behalf of this mailbox.' + "`n"
 		}
+		$CreatedOn = $Group.WhenCreated
+	}
+
+	if ($CreatedOn) {
+		$CreatedOn = ([DateTime]$CreatedOn).ToString("yyyy-MM-dd")
+	}
+
+	$EmailAddresses = ""
+	if ($GroupType -in @('Distribution List', 'Shared Mailbox')) {
+		$EmailAddresses = $Group.EmailAddresses -join "`n"
+	} else {
+		$EmailAddresses = $Group.ProxyAddresses -join "`n" 
 	}
 
 	# Get existing asset to update (if one exists)
@@ -485,7 +500,9 @@ function UpdateGroupAsset {
 					"group-description" = $Description
 					"ad-access-group" = $ADGroups
 					"objectid" = $GroupID
+					"created-on" = $CreatedOn
 					"configuration-details" = $ConfigurationDetails
+					"email-addresses" = $EmailAddresses
 					"owners" = $($OwnerUsers.id | Sort-Object -Unique)
 					"member-mailboxes" = $($MemberUsers.id | Sort-Object -Unique)
 					"owners-table" = $OwnersTable
@@ -522,7 +539,9 @@ function UpdateGroupAsset {
 
 						"ad-access-group" = $ExistingGroup.attributes.traits."ad-access-group"
 						"objectid" = $GroupID
+						"created-on" = $ExistingGroup.attributes.traits."created-on"
 						"configuration-details" = $ExistingGroup.attributes.traits."configuration-details"
+						"email-addresses" = $EmailAddresses
 						"group-details" = $ExistingGroup.attributes.traits."group-details"
 
 						"who-to-add" = $ExistingGroup.attributes.traits."who-to-add"
