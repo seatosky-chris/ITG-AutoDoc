@@ -476,9 +476,9 @@ function UpdateGroupAsset {
 
 	$EmailAddresses = ""
 	if ($GroupType -in @('Distribution List', 'Shared Mailbox')) {
-		$EmailAddresses = $Group.EmailAddresses -join "`n"
+		$EmailAddresses = $Group.EmailAddresses -join "<br/>`n"
 	} else {
-		$EmailAddresses = $Group.ProxyAddresses -join "`n" 
+		$EmailAddresses = $Group.ProxyAddresses -join "<br/>`n" 
 	}
 
 	# Get existing asset to update (if one exists)
