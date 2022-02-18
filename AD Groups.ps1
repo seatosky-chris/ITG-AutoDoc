@@ -2,6 +2,7 @@
 $APIKEy =  "<ITG API KEY>"
 $APIEndpoint = "<ITG API URL>"
 $orgID = "<ITG Org ID>"
+$LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
 $UpdateOnly = $false # If set to $true, the script will only update existing assets. If $false, it will add new groups (that have members) and add them to ITG with as much info as possible.
 $FlexAssetName = "AD Security Groups"
 $Description = "Updates/creates all security groups in ITG with their members and parents. When creating new one's it will do its best to categorize them properly."
@@ -99,6 +100,7 @@ $FullConfigurationsList = (Get-ITGlueConfigurations -page_size 1000 -organizatio
 Write-Host "Updating Groups"
 $AllGroups = Get-ADGroup -Filter 'GroupCategory -eq "Security"' -Properties Description, info | Sort-Object -Property Name -Unique
 $GroupCount = ($AllGroups | Measure-Object).Count
+$UpdatedGroups = 0
 $i = 0
 foreach ($Group in $AllGroups) {
 	$i++
@@ -348,7 +350,9 @@ foreach ($Group in $AllGroups) {
 			New-ITGlueFlexibleAssets -data $FlexAssetBody
 		} elseif ($Response.Error) {
 			Write-Host "Error uploading flexible asset - $($Group.name)" -ForegroundColor Red
+			continue
 		}
+		$UpdatedGroups++
 	} else {
 		Write-Progress -Activity "Updating Groups" -PercentComplete $PercentComplete -Status ("Working - " + $PercentComplete + "%  (Updating group '$($Group.name) - Updating asset')")
 		$FlexAssetBody = 
@@ -389,7 +393,31 @@ foreach ($Group in $AllGroups) {
 			Set-ITGlueFlexibleAssets -id $ExistingGroup.id  -data $FlexAssetBody
 		} elseif ($Response.Error) {
 			Write-Host "Error updating flexible asset - $($Group.name)" -ForegroundColor Red
+			continue
 		}
+		$UpdatedGroups++
 	}
 } 
 Write-Progress -Activity "Updating Groups" -Status "Ready" -Completed
+
+# Update / Create the "Scripts - Last Run" ITG page which shows when this AutoDoc (and other scripts) last ran
+if ($LastUpdatedUpdater_APIURL -and $orgID -and $UpdatedGroups -gt 0) {
+	$Headers = @{
+		"x-api-key" = $APIKEy
+	}
+	$Body = @{
+		"apiurl" = $APIEndpoint
+		"itgOrgID" = $orgID
+		"HostDevice" = $env:computername
+		"ad-groups" = (Get-Date).ToString("yyyy-MM-dd")
+	}
+
+	$Params = @{
+		Method = "Post"
+		Uri = $LastUpdatedUpdater_APIURL
+		Headers = $Headers
+		Body = ($Body | ConvertTo-Json)
+		ContentType = "application/json"
+	}			
+	Invoke-RestMethod @Params 
+}

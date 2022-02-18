@@ -2,6 +2,7 @@
 $APIKEy =  "<ITG API KEY>"
 $APIEndpoint = "<ITG API URL>"
 $orgID = "<ITG ORG ID>"
+$LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
 $ITGlue_Base_URI = "https://sts.itglue.com"
 $LicensingFlexAssetName = "Licensing"
 $OverviewFlexAssetName = "Custom Overview"
@@ -210,4 +211,26 @@ if ($OverviewDocumentName -and $LicenseOverview) {
 		}
 	}
 	New-ITGlueRelatedItems -resource_type 'flexible_assets' -resource_id $ExistingOverviewID -data $RelatedItemsBody
+
+	# Update / Create the "Scripts - Last Run" ITG page which shows when this AutoDoc (and other scripts) last ran
+	if ($LastUpdatedUpdater_APIURL -and $orgID) {
+		$Headers = @{
+			"x-api-key" = $APIKEy
+		}
+		$Body = @{
+			"apiurl" = $APIEndpoint
+			"itgOrgID" = $orgID
+			"HostDevice" = $env:computername
+			"licensing-overview" = (Get-Date).ToString("yyyy-MM-dd")
+		}
+
+		$Params = @{
+			Method = "Post"
+			Uri = $LastUpdatedUpdater_APIURL
+			Headers = $Headers
+			Body = ($Body | ConvertTo-Json)
+			ContentType = "application/json"
+		}			
+		Invoke-RestMethod @Params 
+	}
 }

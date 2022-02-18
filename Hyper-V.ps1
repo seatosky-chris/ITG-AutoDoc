@@ -2,8 +2,9 @@
 ########################## IT-Glue ############################
 $APIKEy = "<ITG API KEY>"
 $APIEndpoint = "<ITG API URL>"
-$FlexAssetName = "Hyper-V Host"
 $OrgID = "<ITG Org ID>"
+$LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
+$FlexAssetName = "Hyper-V Host"
 $Description = "A network one-page document that displays the current Hyper-V Settings and virtual machines"
 # some layout options, change if you want colours to be different or do not like the whitespace.
 $TableHeader = "<table class=`"table table-bordered table-hover`" style=`"width:80%`">"
@@ -81,4 +82,26 @@ else {
     write-host "  Editing Hyper-v into IT-Glue organisation $OrgID"  -ForegroundColor Green
     $ExistingFlexAsset = $ExistingFlexAsset[-1]
     Set-ITGlueFlexibleAssets -id $ExistingFlexAsset.id -data $FlexAssetBody
+}
+
+# Update / Create the "Scripts - Last Run" ITG page which shows when this AutoDoc (and other scripts) last ran
+if ($LastUpdatedUpdater_APIURL -and $OrgID) {
+    $Headers = @{
+        "x-api-key" = $APIKEy
+    }
+    $Body = @{
+        "apiurl" = $APIEndpoint
+        "itgOrgID" = $orgID
+        "HostDevice" = $env:computername
+        "hyper-v" = (Get-Date).ToString("yyyy-MM-dd")
+    }
+
+    $Params = @{
+        Method = "Post"
+        Uri = $LastUpdatedUpdater_APIURL
+        Headers = $Headers
+        Body = ($Body | ConvertTo-Json)
+        ContentType = "application/json"
+    }			
+    Invoke-RestMethod @Params 
 }

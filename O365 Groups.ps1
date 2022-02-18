@@ -2,6 +2,7 @@
 $ITGApiKey = "<ITG API KEY>"
 $ITGApiEndpoint = "<ITG API URL>"
 $OrgID = "<ITG Org ID>"
+$LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
 $UpdateOnly = $false # If set to $true, the script will only update existing assets. If $false, it will add new groups and add them to ITG with as much info as possible.
 $FlexAssetName = "Email Groups"
 $ADGroupsFlexAssetName = "AD Security Groups"
@@ -353,6 +354,7 @@ function UpdateGroupAsset {
 		$EmailAddress = $Group.PrimarySmtpAddress
 		$Description = ""
 	}
+	$Description = $Description[0..254] -join "" # limit to 255 chars
 
 	if ($UpdateOnly) {
 		if ($GroupID -notin $ExistingGroupIdentifiers.ObjectID -and $GroupName -notin $ExistingGroupIdentifiers."group-name" -and (!$EmailAddress -or $EmailAddress -notin $ExistingGroupIdentifiers."email-address")) {
@@ -639,3 +641,25 @@ foreach ($Group in $SharedMailboxes) {
 }
 
 Write-Progress -Activity "Updating Groups" -Status "Ready" -Completed
+
+# Update / Create the "Scripts - Last Run" ITG page which shows when this AutoDoc (and other scripts) last ran
+if ($LastUpdatedUpdater_APIURL -and $orgID) {
+    $Headers = @{
+        "x-api-key" = $ITGApiKey
+    }
+    $Body = @{
+        "apiurl" = $ITGApiEndpoint
+        "itgOrgID" = $orgID
+        "HostDevice" = $env:computername
+        "o365-groups" = (Get-Date).ToString("yyyy-MM-dd")
+    }
+
+    $Params = @{
+        Method = "Post"
+        Uri = $LastUpdatedUpdater_APIURL
+        Headers = $Headers
+        Body = ($Body | ConvertTo-Json)
+        ContentType = "application/json"
+    }			
+    Invoke-RestMethod @Params 
+}

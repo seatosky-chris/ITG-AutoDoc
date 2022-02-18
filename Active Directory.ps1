@@ -2,6 +2,7 @@
 $APIKEy =  "<ITG API KEY>"
 $APIEndpoint = "<ITG API URL>"
 $orgID = "<ITG Org ID>"
+$LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
 $FlexAssetName = "Active Directory"
 $Description = "A network one-page document that shows the current configuration for Active Directory."
 #####################################################################
@@ -274,3 +275,25 @@ else {
 
     Set-ITGlueFlexibleAssets -id $ExistingFlexAsset.id  -data $UpdatedFlexAssetBody
 } 
+
+# Update / Create the "Scripts - Last Run" ITG page which shows when this AutoDoc (and other scripts) last ran
+if ($LastUpdatedUpdater_APIURL -and $orgID) {
+    $Headers = @{
+        "x-api-key" = $APIKEy
+    }
+    $Body = @{
+        "apiurl" = $APIEndpoint
+        "itgOrgID" = $orgID
+        "HostDevice" = $env:computername
+        "active-directory" = (Get-Date).ToString("yyyy-MM-dd")
+    }
+
+    $Params = @{
+        Method = "Post"
+        Uri = $LastUpdatedUpdater_APIURL
+        Headers = $Headers
+        Body = ($Body | ConvertTo-Json)
+        ContentType = "application/json"
+    }			
+    Invoke-RestMethod @Params 
+}

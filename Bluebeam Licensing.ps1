@@ -3,6 +3,7 @@ $APIKEy =  "<ITG API KEY>"
 $APIEndpoint = "<ITG API URL>"
 $orgID = "<ITG Org ID>"
 $ITGlue_Base_URI = "https://sts.itglue.com"
+$LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
 $FlexAssetName = "Licensing"
 $ForceUpdate = $false # Forces every bluebeam license to be updated even if the primary fields won't change (good for a first run)
 $PrimaryEmail = "" # The primary email bluebeam is generally licensed under
@@ -63,6 +64,7 @@ function GetFormNonce($WebSession) {
 # Now we loop through all exiting bluebeam licenses and get the updated info for them
 $i = 0
 $LicenseOverview = @()
+$UpdatedLicenses = 0
 foreach ($ExistingLicense in $ExistingLicenses) {
 	$i++
 	[int]$PercentComplete = $i / $LicenseCount * 100
@@ -384,6 +386,7 @@ foreach ($ExistingLicense in $ExistingLicenses) {
 		} else {
 			Write-Host "Updating not required for License - $($ExistingTraits."name") $($ExistingTraits."version")  (ID: $($ExistingLicense.id))"
 		}
+		$UpdatedLicenses++
 	} else {
 		# We couldn't find the computer or license info, lets not update this
 		Write-Error "Did not update license. Could not find the computer list or license info for $($ExistingLicense.attributes.name): $($ExistingLicense.attributes.'resource-url')"
@@ -436,4 +439,26 @@ if ($OverviewDocument -and $LicenseOverview) {
 			}
 		}
 		New-ITGlueRelatedItems -resource_type 'flexible_assets' -resource_id $OverviewDocument -data $RelatedItemsBody
+}
+
+# Update / Create the "Scripts - Last Run" ITG page which shows when this AutoDoc (and other scripts) last ran
+if ($LastUpdatedUpdater_APIURL -and $orgID -and $UpdatedLicenses -gt 0) {
+	$Headers = @{
+		"x-api-key" = $APIKEy
+	}
+	$Body = @{
+		"apiurl" = $APIEndpoint
+		"itgOrgID" = $orgID
+		"HostDevice" = $env:computername
+		"bluebeam-licensing" = (Get-Date).ToString("yyyy-MM-dd")
+	}
+
+	$Params = @{
+		Method = "Post"
+		Uri = $LastUpdatedUpdater_APIURL
+		Headers = $Headers
+		Body = ($Body | ConvertTo-Json)
+		ContentType = "application/json"
+	}			
+	Invoke-RestMethod @Params 
 }

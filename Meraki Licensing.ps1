@@ -1,6 +1,7 @@
 #####################################################################
 $APIKEy =  "<ITG API KEY>"
 $APIEndpoint = "<ITG API URL>"
+$LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
 $MerakiAPIKey = "<MERAKI API KEY>"
 $ITGlue_Base_URI = "https://sts.itglue.com"
 $FlexAssetName = "Licensing"
@@ -335,6 +336,7 @@ foreach ($Org in $OrgMatches) {
 $OrgDevices = @()
 $OrgExistingLicenses = @()
 foreach ($OrgLicensing in $LicenseInfo) {
+	$UpdatedLicenses = 0
 	# Skip empty licenses
 	if ([string]::IsNullOrEmpty($OrgLicensing.licensedDeviceCounts) -and !$OrgLicensing.licenses -and !$OrgLicensing.devices) {
 		continue
@@ -445,6 +447,7 @@ foreach ($OrgLicensing in $LicenseInfo) {
 				Write-Host "Creating new per-device license asset for: $($Organization.itgName) - $($OrgDevice[0].attributes.name)"
 				New-ITGlueFlexibleAssets -data $FlexAssetBody
 			}
+			$UpdatedLicenses++
 		}
 	} else {
 		# Co-term licensing
@@ -524,5 +527,28 @@ foreach ($OrgLicensing in $LicenseInfo) {
 			Write-Host "Creating new co-term license asset for: $($Organization.itgName)"
 			New-ITGlueFlexibleAssets -data $FlexAssetBody
 		}
+		$UpdatedLicenses++
+	}
+
+	# Update / Create the "Scripts - Last Run" ITG page which shows when this AutoDoc (and other scripts) last ran
+	if ($LastUpdatedUpdater_APIURL -and $Organization.itgId -and $UpdatedLicenses -gt 0) {
+		$Headers = @{
+			"x-api-key" = $APIKEy
+		}
+		$Body = @{
+			"apiurl" = $APIEndpoint
+			"itgOrgID" = $Organization.itgId
+			"HostDevice" = $env:computername
+			"meraki-licensing" = (Get-Date).ToString("yyyy-MM-dd")
+		}
+
+		$Params = @{
+			Method = "Post"
+			Uri = $LastUpdatedUpdater_APIURL
+			Headers = $Headers
+			Body = ($Body | ConvertTo-Json)
+			ContentType = "application/json"
+		}			
+		Invoke-RestMethod @Params 
 	}
 }

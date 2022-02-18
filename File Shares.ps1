@@ -2,6 +2,7 @@
 $APIKEy =  "<ITG API KEY>"
 $APIEndpoint = "<ITG API URL>"
 $orgID = "<ITG ORG ID>"
+$LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
 $UpdateOnly = $false # If set to $true, the script will only update existing assets. If $false, it will add new file shares (that have members) and add them to ITG with as much info as possible.
 $FlexAssetName = "File Shares / Storage"
 $ADGroupsAssetName = "AD Security Groups"
@@ -127,6 +128,7 @@ $ServerAsset = (Get-ITGlueConfigurations -page_size "1000" -filter_name $ENV:COM
 
 # Loop through each share and get permissions then update ITG
 $i = 0
+$UpdatedShares = 0
 foreach ($SMBShare in $AllSmbShares) {
 	$i++
 	[int]$PercentComplete = $i / $TotalShares * 100
@@ -325,5 +327,28 @@ foreach ($SMBShare in $AllSmbShares) {
 		Write-Host "Updating Flexible Asset - $($ExistingShare.attributes.traits."share-name")"
 		Set-ITGlueFlexibleAssets -id $ExistingShare.id -data $FlexAssetBody
 	}
+	$UpdatedShares++
 }
 Write-Progress -Activity "Updating Shares" -Status "Ready" -Completed
+
+# Update / Create the "Scripts - Last Run" ITG page which shows when this AutoDoc (and other scripts) last ran
+if ($LastUpdatedUpdater_APIURL -and $orgID -and $UpdatedShares -gt 0) {
+	$Headers = @{
+		"x-api-key" = $APIKEy
+	}
+	$Body = @{
+		"apiurl" = $APIEndpoint
+		"itgOrgID" = $orgID
+		"HostDevice" = $env:computername
+		"file-shares" = (Get-Date).ToString("yyyy-MM-dd")
+	}
+
+	$Params = @{
+		Method = "Post"
+		Uri = $LastUpdatedUpdater_APIURL
+		Headers = $Headers
+		Body = ($Body | ConvertTo-Json)
+		ContentType = "application/json"
+	}			
+	Invoke-RestMethod @Params 
+}
