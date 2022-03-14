@@ -446,7 +446,7 @@ function UpdateGroupAsset {
 		($GroupType -eq 'Distribution List' -and $Group.IsDirSynced) -or
 		($GroupType -eq 'Mail-enabled Security' -and $Group.DirSyncEnabled)) 
 	{
-		$ADGroups = @($AllADGroups | Where-Object { $_.attributes.traits."group-name" -like $GroupName } | Select-Object id)
+		$ADGroups = @($AllADGroups | Where-Object { $_.attributes.traits."group-name" -like $GroupName } | Select-Object -ExpandProperty id)
 	}
 
 	$ConfigurationDetails = ""
@@ -505,8 +505,8 @@ function UpdateGroupAsset {
 					"created-on" = $CreatedOn
 					"configuration-details" = $ConfigurationDetails
 					"email-addresses" = $EmailAddresses
-					"owners" = $($OwnerUsers.id | Sort-Object -Unique)
-					"member-mailboxes" = $($MemberUsers.id | Sort-Object -Unique)
+					"owners" = @($($OwnerUsers.id | Sort-Object -Unique))
+					"member-mailboxes" = @($($MemberUsers.id | Sort-Object -Unique))
 					"owners-table" = $OwnersTable
 					"members-table" = $MembersTable
 				}
@@ -528,6 +528,15 @@ function UpdateGroupAsset {
 			Write-Host "Error uploading flexible asset - $GroupName" -ForegroundColor Red
 		}
 	} else {
+		$Approver = @()
+		$ADAccessGroup = @()
+		if ($ExistingGroup.attributes.traits."approver-for-access") {
+			$Approver = @($ExistingGroup.attributes.traits."approver-for-access".values.id)
+		}
+		if ($ExistingGroup.attributes.traits."ad-access-group") {
+			$ADAccessGroup = @($ExistingGroup.attributes.traits."ad-access-group".values.id)
+		}
+
 		$FlexAssetBody = 
 		@{
 			type = 'flexible-assets'
@@ -539,7 +548,7 @@ function UpdateGroupAsset {
 						"user-additions" = $ExistingGroup.attributes.traits."user-additions"
 						"group-description" = $ExistingGroup.attributes.traits."group-description"
 
-						"ad-access-group" = $ExistingGroup.attributes.traits."ad-access-group"
+						"ad-access-group" = $ADAccessGroup
 						"objectid" = $GroupID
 						"created-on" = $ExistingGroup.attributes.traits."created-on"
 						"configuration-details" = $ExistingGroup.attributes.traits."configuration-details"
@@ -547,9 +556,9 @@ function UpdateGroupAsset {
 						"group-details" = $ExistingGroup.attributes.traits."group-details"
 
 						"who-to-add" = $ExistingGroup.attributes.traits."who-to-add"
-						"approver-for-access" = @($ExistingGroup.attributes.traits."approver-for-access".values.id)
-						"owners" = $($OwnerUsers.id | Sort-Object -Unique)
-						"member-mailboxes" = $($MemberUsers.id | Sort-Object -Unique)
+						"approver-for-access" = $Approver
+						"owners" = @($($OwnerUsers.id | Sort-Object -Unique))
+						"member-mailboxes" = @($($MemberUsers.id | Sort-Object -Unique))
 						"owners-table" = $OwnersTable
 						"members-table" = $MembersTable
 					}
