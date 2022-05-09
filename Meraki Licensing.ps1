@@ -495,7 +495,7 @@ foreach ($OrgLicensing in $LicenseInfo) {
 				($DeviceCounts | ForEach-Object { $ExistingLicense.attributes.traits.'additional-notes' -notlike "*$($_.DeviceType)</td><td>$($_.Count)*" })) {
 					# changes found, update
 					if ($ExistingLicense.attributes.traits.'additional-notes') {
-						$AdditionalNotes = $ExistingLicense.attributes.traits.'additional-notes' -replace "<h3>Licensed Device Counts<\/h3>\s?<table>.+<\/table>", ""
+						$AdditionalNotes = $ExistingLicense.attributes.traits.'additional-notes' -replace "<h3>Licensed Device Counts<\/h3>\s?<table>(.|\s)+?<\/table>", ""
 						$AdditionalNotes = $AdditionalNotes.Trim()
 						$AdditionalNotes = "$AdditionalNotes `n<h3>Licensed Device Counts</h3>`n$($DeviceCounts | ConvertTo-Html -Fragment | Out-String)"
 						$FlexAssetBody.attributes.traits.'additional-notes' = $AdditionalNotes
