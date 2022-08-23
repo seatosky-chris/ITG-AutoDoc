@@ -5,7 +5,6 @@ $orgID = "<ITG ORG ID>"
 $LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
 $UpdateOnly = $false # If set to $true, the script will only update existing assets. If $false, it will add new file shares (that have members) and add them to ITG with as much info as possible.
 $FlexAssetName = "File Shares / Storage"
-$ADGroupsAssetName = "AD Security Groups"
 $Description = "Updates/creates all file shares in ITG with their associated permissions. It will tag AD security groups where possible."
 # Ignore by name
 $IgnoreShares = @(
@@ -17,6 +16,7 @@ $IgnoreSharePaths = @(
 ) 
 $RecursiveDepth = 3 # How deep in the file structure to look for permissions
 $IgnoreLocalGroups = $true # If true, it will ignore permissions of local groups/accounts and only look up domain groups & accounts
+$PermissionsFileUUID = "aacb925d-3c22-4b35-8b2e-9da010fa2dea"
 ####################################################################
 
 # Ensure they are using the latest TLS version
@@ -46,9 +46,35 @@ Add-ITGlueBaseURI -base_uri $APIEndpoint
 Add-ITGlueAPIKey $APIKEy
 Write-Host "Configured the ITGlue API"
 
+# ConvertTo-Json filter that turns enums into strings (for permissions json)
+# https://stackoverflow.com/a/54024450
+Filter ConvertTo-EnumsAsStrings ([int] $Depth = 2, [int] $CurrDepth = 0) {
+	if ($_ -is [enum]) { # enum value -> convert to symbolic name as string
+		$_.ToString() 
+	} elseif ($null -eq $_ -or $_.GetType().IsPrimitive -or $_ -is [string] -or $_ -is [decimal] -or $_ -is [datetime] -or $_ -is [datetimeoffset]) {
+		$_
+	} elseif ($_ -is [Collections.IEnumerable] -and $_ -isnot [Collections.IDictionary]) { # enumerable (other than a dictionary)
+		, ($_ | ConvertTo-EnumsAsStrings -Depth $Depth -CurrDepth ($CurrDepth+1))
+	} else { # non-primitive type or dictionary (hashtable) -> recurse on properties / entries
+		if ($CurrDepth -gt $Depth) { # depth exceeded -> return .ToString() representation
+			Write-Warning "Recursion depth $Depth exceeded - reverting to .ToString() representations."
+			"$_"
+		} else {
+			$oht = [ordered] @{}
+			foreach ($prop in $(if ($_ -is [Collections.IDictionary]) { $_.GetEnumerator() } else { $_.psobject.properties })) {
+		  		if ($prop.Value -is [Collections.IEnumerable] -and $prop.Value -isnot [Collections.IDictionary] -and $prop.Value -isnot [string]) {
+					$oht[$prop.Name] = @($prop.Value | ConvertTo-EnumsAsStrings -Depth $Depth -CurrDepth ($CurrDepth+1))
+		  		} else {      
+					$oht[$prop.Name] = $prop.Value | ConvertTo-EnumsAsStrings -Depth $Depth -CurrDepth ($CurrDepth+1)
+		  		}
+			}
+			$oht
+	  	}
+	}
+}
+
 # Get the flexible asset type id
 $FilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $FlexAssetName).data
-$ADGroupsFilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $ADGroupsAssetName).data
 
 # Get existing shares
 Write-Host "Downloading existing shares"
@@ -71,57 +97,6 @@ $AllSmbShares = Get-SmbShare | Where-Object {
 	($IgnoreSharePaths | ForEach-Object {$Share.Path -like $_}) -notcontains $true
 }
 $TotalShares = ($AllSmbShares | Measure-Object).Count
-
-# Get all security groups (so that we can determine if a permission is a security group or a user)
-$AllGroupSIDs = (Get-ADGroup -Filter 'GroupCategory -eq "Security"' | Select-Object SID).SID
-
-# Get security groups assets on ITG
-Write-Host "Downloading existing security groups"
-# For companies with many groups trying to get them all at once sometimes times out
-# By looping through 200 at a time we prevent a timeout from happening.
-$ExistingGroups = @()
-$i = 1
-while ($i -le 10 -and ($ExistingGroups | Measure-Object).Count -eq (($i-1) * 200)) {
-	$ExistingGroups += (Get-ITGlueFlexibleAssets -page_size 200 -page_number $i -filter_flexible_asset_type_id $ADGroupsFilterID.id -filter_organization_id $orgID).data
-	Write-Host "- Got group set $i"
-	$TotalGroups = ($ExistingGroups | Measure-Object).Count
-	Write-Host "- Total: $TotalGroups"
-	$i++
-}
-
-# Get DFS Namespaces
-If (Get-Module -ListAvailable -Name "DFSN") {
-	$DFSNs = Get-DfsnRoot -erroraction 'silentlycontinue' | Where-Object { $_.State -eq "Online" }
-	$DFSNs | Add-Member -MemberType NoteProperty -Name TargetPaths -Value $null
-	$DFSns | ForEach-Object {
-		$_.TargetPaths = @((Get-DfsnRootTarget -Path $_.Path | Where-Object { $_.State -eq "Online" } | Select-Object TargetPath).TargetPath)
-	}
-} else {
-	$DFSNs = $false
-}
-
-# Get all drive mapping GPOs
-If (Get-Module -ListAvailable -Name "GroupPolicy") {
-	$GPOs = Get-GPO -All | Where-Object { $GPOID = $_.Id; $GPODom = $_.DomainName; $GPODisp = $_.DisplayName; Test-Path "\\$($GPODom)\SYSVOL\$($GPODom)\Policies\{$($GPOID)}\User\Preferences\Drives\Drives.xml" }
-	$GPOs | Add-Member -MemberType NoteProperty -Name DriveMappings -Value @()
-	$GPOs | ForEach-Object {
-		$GPOID = $_.Id; $GPODom = $_.DomainName; $GPODisp = $_.DisplayName;
-		[xml]$DriveXML = Get-Content "\\$($GPODom)\SYSVOL\$($GPODom)\Policies\{$($GPOID)}\User\Preferences\Drives\Drives.xml"
-		foreach ($drivemap in $DriveXML.Drives.Drive) {
-			$_.DriveMappings += New-Object PSObject -Property @{
-				GPOName = $GPODisp
-				DriveLetter = $drivemap.Properties.Letter + ":"
-				DrivePath = $drivemap.Properties.Path
-				DriveAction = $drivemap.Properties.action.Replace("U","Update").Replace("C","Create").Replace("D","Delete").Replace("R","Replace")
-				DriveLabel = $drivemap.Properties.label
-				DrivePersistent = $drivemap.Properties.persistent.Replace("0","False").Replace("1","True")
-				DriveFilterGroup = $drivemap.Filters.FilterGroup.Name
-			}
-		}
-	}
-} else {
-	$GPOs = $false
-}
 
 # Get this servers configuration ID for tagging
 $ServerAsset = (Get-ITGlueConfigurations -page_size "1000" -filter_name $ENV:COMPUTERNAME -organization_id $orgID).data
@@ -171,59 +146,10 @@ foreach ($SMBShare in $AllSmbShares) {
 	$Servers = @($ServerAsset.ID)
 	$DiskPath = $SMBShare.Path
 
-	# See if this share is in a DFS namespace, we'll use this info to get mapped drive info
-	if ($DFSNs) {
-		$Namespace = $DFSNs | Where-Object { $_.TargetPaths -contains $SharePath -or $_.TargetPaths -contains ($SharePath + "$") }
-	} else {
-		$Namespace = $false
-	}
-
-	# See if there is a GPO that maps this drive using the share path or a namespace path
-	if ($Namespace.Path) {
-		if ($GPOs) {
-			$GPO = $GPOs | Where-Object { $_.DriveMappings.DrivePath -like $SharePath -or $_.DriveMappings.DrivePath -like ($SharePath + "$") -or $_.DriveMappings.DrivePath -like $Namespace.Path }
-			$GPODriveMap = $GPO.DriveMappings | Where-Object { $_.DrivePath -like $SharePath -or $_.DrivePath -like ($SharePath + "$") -or $_.DrivePath -like $Namespace.Path }
-		} else {
-			$GPODriveMap = $false
-		}
-	} else {
-		if ($GPOs) {
-			$GPO = $GPOs | Where-Object { $_.DriveMappings.DrivePath -like $SharePath -or $_.DriveMappings.DrivePath -like ($SharePath + "$") }
-			$GPODriveMap = $GPO.DriveMappings | Where-Object { $_.DrivePath -like $SharePath -or $_.DrivePath -like ($SharePath + "$") }
-		} else {
-			$GPODriveMap = $false
-		}
-	}
+	# Also save a permissions json file to the file share for the AD Server portion to use for updating
+	$PermsJson = ($Permissions | ConvertTo-EnumsAsStrings -Depth 10 | ConvertTo-Json -Depth 10)
+	$PermsJson | Out-File -FilePath ($DiskPath + "/PermissionsBackup_$PermissionsFileUUID.json")
 	
-	if ($GPODriveMap) {
-		$MappedDriveLetter = $($GPODriveMap.DriveLetter | Sort-Object -Unique) -join ", "
-		$RelatedGPO = $($GPODriveMap.GPOName | Sort-Object -Unique) -join ", "
-		if ($GPODriveMap.DrivePath -ne $SharePath -and $SharePath -notlike "*$($GPODriveMap.DrivePath)*") {
-			$SharePath += ", " + $($GPODriveMap.DrivePath | Sort-Object -Unique) -join ", "
-		}
-	}
-
-	# Now lets run through each permission set and find the associated AD Groups in ITG for tagging
-	$FullAccessAccounts = ($FullAccess | Select-Object Account -Unique).Account | Where-Object { $_.SID -in $AllGroupSIDs }
-	$ModifyAccounts = ($Modify | Select-Object Account -Unique).Account | Where-Object { $_.SID -in $AllGroupSIDs }
-	$ReadOnlyAccounts = ($ReadOnly | Select-Object Account -Unique).Account | Where-Object { $_.SID -in $AllGroupSIDs }
-	$DenyAccounts = ($Deny | Select-Object Account -Unique).Account | Where-Object { $_.SID -in $AllGroupSIDs }
-
-	$FullAccessAccounts | Add-Member -MemberType NoteProperty -Name Name -Value $null
-	$ModifyAccounts | Add-Member -MemberType NoteProperty -Name Name -Value $null
-	$ReadOnlyAccounts | Add-Member -MemberType NoteProperty -Name Name -Value $null
-	$DenyAccounts | Add-Member -MemberType NoteProperty -Name Name -Value $null
-
-	$FullAccessAccounts | ForEach-Object { $_.Name = (Get-ADGroup $_.SID | Select-Object Name).Name	}
-	$ModifyAccounts | ForEach-Object { $_.Name = (Get-ADGroup $_.SID | Select-Object Name).Name	}
-	$ReadOnlyAccounts | ForEach-Object { $_.Name = (Get-ADGroup $_.SID | Select-Object Name).Name }
-	$DenyAccounts | ForEach-Object { $_.Name = (Get-ADGroup $_.SID | Select-Object Name).Name }
-	
-	$FullAccessGroups = $ExistingGroups | Where-Object { $_.attributes.traits."group-name" -in $FullAccessAccounts.Name }
-	$ModifyGroups = $ExistingGroups | Where-Object { $_.attributes.traits."group-name" -in $ModifyAccounts.Name }
-	$ReadOnlyGroups = $ExistingGroups | Where-Object { $_.attributes.traits."group-name" -in $ReadOnlyAccounts.Name }
-	$DenyGroups = $ExistingGroups | Where-Object { $_.attributes.traits."group-name" -in $DenyAccounts.Name }
-
 	# Get existing asset to update (if one exists)
 	$ExistingShare = $ExistingShares | Where-Object { $_.attributes.traits."disk-path-on-server" -eq $DiskPath -and $_.attributes.traits.servers.values.id -contains $Servers[0] -and $_.attributes.traits."share-type" -eq "Windows File Share" } | Select-Object -First 1
 	# If the Asset does not exist, create a new asset, if it does exist we'll combine the old and the new
@@ -244,10 +170,6 @@ foreach ($SMBShare in $AllSmbShares) {
 					"related-gpo" = $RelatedGPO
 					"servers" = @($Servers)
 					"disk-path-on-server" = $DiskPath
-					"ad-groups-full-access" = @($($FullAccessGroups.id | Sort-Object -Unique))
-					"ad-groups-modify" = @($($ModifyGroups.id | Sort-Object -Unique))
-					"ad-groups-read-only" = @($($ReadOnlyGroups.id | Sort-Object -Unique))
-					"ad-groups-deny" = @($($DenyGroups.id | Sort-Object -Unique))
 					"full-access-permissions" = $FullAccessCsv
 					"read-permissions" = $ReadOnlyCsv
 					"modify-permissions" = $ModifyCsv
@@ -274,12 +196,6 @@ foreach ($SMBShare in $AllSmbShares) {
 		# Update existing asset
 		Write-Progress -Activity "Updating Shares" -PercentComplete $PercentComplete -Status ("Working - " + $PercentComplete + "%  (Updating share '$($ShareName)' - Updating asset)")
 
-		if (!$MappedDriveLetter) {
-			$MappedDriveLetter = $ExistingShare.attributes.traits."mapped-drive-letter"
-		}
-		if (!$RelatedGPO) {
-			$RelatedGPO = $ExistingShare.attributes.traits."related-gpo"
-		}
 		if (!$GPODriveMap -and $ExistingShare.attributes.traits."share-path" -and $ExistingShare.attributes.traits."share-path" -like "*$($SharePath), *" ) {
 			$SharePath = $ExistingShare.attributes.traits."share-path"
 		}
@@ -294,17 +210,17 @@ foreach ($SMBShare in $AllSmbShares) {
 					"share-name" = $ExistingShare.attributes.traits."share-name"
 					"share-type" = $ShareType
 					"share-description" = $ExistingShare.attributes.traits."share-description"
-					"mapped-drive-letter" = $MappedDriveLetter
+					"mapped-drive-letter" = $ExistingShare.attributes.traits."mapped-drive-letter"
 					"share-path" = $SharePath
-					"related-gpo" = $RelatedGPO
+					"related-gpo" = $ExistingShare.attributes.traits."related-gpo"
 					"servers" = @($ExistingShare.attributes.traits.servers.values.id)
 					"disk-path-on-server" = $DiskPath
 					"approver-for-access-to-folder" = @($ExistingShare.attributes.traits."approver-for-access-to-folder".values.id)
 					"specific-setup-instructions" = $ExistingShare.attributes.traits."specific-setup-instructions"
-					"ad-groups-full-access" = @($($FullAccessGroups.id | Sort-Object -Unique))
-					"ad-groups-modify" = @($($ModifyGroups.id | Sort-Object -Unique))
-					"ad-groups-read-only" = @($($ReadOnlyGroups.id | Sort-Object -Unique))
-					"ad-groups-deny" = @($($DenyGroups.id | Sort-Object -Unique))
+					"ad-groups-full-access" = @($ExistingShare.attributes.traits."ad-groups-full-access".values.id)
+					"ad-groups-modify" = @($ExistingShare.attributes.traits."ad-groups-modify".values.id)
+					"ad-groups-read-only" = @($ExistingShare.attributes.traits."ad-groups-read-only".values.id)
+					"ad-groups-deny" = @($ExistingShare.attributes.traits."ad-groups-deny".values.id)
 					"full-access-permissions" = $FullAccessCsv
 					"read-permissions" = $ReadOnlyCsv
 					"modify-permissions" = $ModifyCsv
@@ -341,7 +257,6 @@ if ($LastUpdatedUpdater_APIURL -and $orgID -and $UpdatedShares -gt 0) {
 		"itgOrgID" = $orgID
 		"HostDevice" = $env:computername
 		"file-shares-file-server" = (Get-Date).ToString("yyyy-MM-dd")
-		"file-shares-ad-server" = (Get-Date).ToString("yyyy-MM-dd")
 	}
 
 	$Params = @{
