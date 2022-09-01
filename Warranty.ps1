@@ -111,7 +111,14 @@ function Get-WarrantyAutotaskCustom {
                 $true {
                     if ($null -ne $warstate.EndDate) {
 						$UpdatedConfig | Add-Member -NotePropertyName warrantyExpirationDate -NotePropertyValue $null
-						$UpdatedConfig.warrantyExpirationDate = $warstate.EndDate; 
+						$UpdatedConfig.warrantyExpirationDate = $warstate.EndDate;
+						if ([string]$WarState.'Shipped Date' -as [DateTime]) {
+							$UpdatedConfig.userDefinedFields +=
+								[PSCustomObject]@{
+									"name" = "Shipped Date"
+									"value" = (Get-Date $WarState.'Shipped Date' -Format 's')
+								};
+						}
 						if ([string]$WarState.StartDate -as [DateTime]) {
 							$UpdatedConfig.userDefinedFields +=
 								[PSCustomObject]@{
@@ -127,7 +134,7 @@ function Get-WarrantyAutotaskCustom {
 								};
 						}
 
-						Set-AutotaskAPIResource -Resource ConfigurationItems -ID $device.id -Body $UpdatedConfig | Out-Null
+						Set-AutotaskAPIResource -Resource ConfigurationItems -Body $UpdatedConfig | Out-Null
                         "$((get-date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss')) Autotask: $Client / $($device.SerialNumber) with AT ID $($device.id) warranty has been overwritten to $($warstate.EndDate)" | out-file $script:LogPath -Append -Force
                     }
                      
@@ -140,8 +147,17 @@ function Get-WarrantyAutotaskCustom {
 							$UpdatedConfig.warrantyExpirationDate = $warstate.EndDate; 
 							$Update = $true
 						}
+						$CurAT_ShippedDate = ($device.userDefinedFields | Where-Object { $_.name -eq "Shipped Date" }).value
 						$CurAT_WarrantyStart = ($device.userDefinedFields | Where-Object { $_.name -eq "Warranty Start Date" }).value
 						$CurAT_WarrantyName = ($ATDevice.userDefinedFields | Where-Object { $_.name -eq "Warranty Product Name" }).value
+
+						if ([string]$WarState.'Shipped Date' -as [DateTime] -and $null -eq $CurAT_ShippedDate) {
+							$UpdatedConfig.userDefinedFields +=
+								[PSCustomObject]@{
+									"name" = "Shipped Date"
+									"value" = (Get-Date $WarState.'Shipped Date' -Format 's')
+								};
+						}
 						if ([string]$WarState.StartDate -as [DateTime] -and $null -eq $CurAT_WarrantyStart) {
 							$UpdatedConfig.userDefinedFields +=
 								[PSCustomObject]@{
@@ -160,7 +176,7 @@ function Get-WarrantyAutotaskCustom {
 						}
 
 						if ($Update) {
-							Set-AutotaskAPIResource -Resource ConfigurationItems -ID $device.id -Body $UpdatedConfig | Out-Null
+							Set-AutotaskAPIResource -Resource ConfigurationItems -Body $UpdatedConfig | Out-Null
                         	"$((get-date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss')) Autotask: $Client / $($device.SerialNumber) with AT ID $($device.id) warranty has been set to $($warstate.EndDate)" | out-file $script:LogPath -Append -Force
 						}
                     } 
