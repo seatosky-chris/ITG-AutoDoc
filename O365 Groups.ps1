@@ -5,7 +5,7 @@ $OrgID = "<ITG Org ID>"
 $LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
 $UpdateOnly = $false # If set to $true, the script will only update existing assets. If $false, it will add new groups and add them to ITG with as much info as possible.
 $FlexAssetName = "Email Groups"
-$ADGroupsFlexAssetName = "AD Security Groups"
+$ADGroupsFlexAssetName = "AD Security Groups" # If you don't document AD groups, set to $false
 $Description = "Auto documentation of all O365 distribution lists and shared mailboxes."
 ################# /IT-Glue Information #####################################
 
@@ -65,7 +65,9 @@ if ($O365UnattendedLogin -and $O365UnattendedLogin.AppId) {
 
 # Get the flexible asset type ids
 $FilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $FlexAssetName).data
-$ADGroupsFilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $ADGroupsFlexAssetName).data
+if ($ADGroupsFlexAssetName) {
+	$ADGroupsFilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $ADGroupsFlexAssetName).data
+}
 
 # If a matched user list csv (from the user audit) exists, get that and user it later for matching ITG contacts to AD usernames
 $OrganizationInfo = (Get-ITGlueOrganizations -id $OrgID).data
@@ -99,15 +101,17 @@ Write-Host "Downloading all ITG contacts"
 $FullContactList = (Get-ITGlueContacts -page_size 1000 -organization_id $OrgID).data
 
 # Get AD groups
-Write-Host "Downloading all AD groups"
-$AllADGroups = @()
-$i = 1
-while ($i -le 10 -and ($AllADGroups | Measure-Object).Count -eq (($i-1) * 200)) {
-	$AllADGroups += (Get-ITGlueFlexibleAssets -page_size 200 -page_number $i -filter_flexible_asset_type_id $ADGroupsFilterID.id -filter_organization_id $orgID).data
-	Write-Host "- Got group set $i"
-	$TotalADGroups = ($AllADGroups | Measure-Object).Count
-	Write-Host "- Total: $TotalADGroups"
-	$i++
+if ($ADGroupsFilterID) {
+	Write-Host "Downloading all AD groups"
+	$AllADGroups = @()
+	$i = 1
+	while ($i -le 10 -and ($AllADGroups | Measure-Object).Count -eq (($i-1) * 200)) {
+		$AllADGroups += (Get-ITGlueFlexibleAssets -page_size 200 -page_number $i -filter_flexible_asset_type_id $ADGroupsFilterID.id -filter_organization_id $orgID).data
+		Write-Host "- Got group set $i"
+		$TotalADGroups = ($AllADGroups | Measure-Object).Count
+		Write-Host "- Total: $TotalADGroups"
+		$i++
+	}
 }
 
 # Get disabled accounts, unlicensed accounts, and guests to add extra data to tables
@@ -442,11 +446,13 @@ function UpdateGroupAsset {
 	}
 
 	$ADGroups = @()
-	if (($GroupType -eq 'Microsoft 365 Group' -and $Group.OnPremisesSyncEnabled) -or
-		($GroupType -eq 'Distribution List' -and $Group.IsDirSynced) -or
-		($GroupType -eq 'Mail-enabled Security' -and $Group.DirSyncEnabled)) 
-	{
-		$ADGroups = @($AllADGroups | Where-Object { $_.attributes.traits."group-name" -like $GroupName } | Select-Object -ExpandProperty id)
+	if ($AllADGroups) {
+		if (($GroupType -eq 'Microsoft 365 Group' -and $Group.OnPremisesSyncEnabled) -or
+			($GroupType -eq 'Distribution List' -and $Group.IsDirSynced) -or
+			($GroupType -eq 'Mail-enabled Security' -and $Group.DirSyncEnabled)) 
+		{
+			$ADGroups = @($AllADGroups | Where-Object { $_.attributes.traits."group-name" -like $GroupName } | Select-Object -ExpandProperty id)
+		}
 	}
 
 	$ConfigurationDetails = ""
