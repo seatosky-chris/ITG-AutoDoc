@@ -9,6 +9,10 @@ $OverviewFlexAssetName = "Custom Overview"
 $LicenseNames = @("Autodesk *", "AutoCAD") # Enter the names of the type(s) of licenses you want to include in the overview. This matches with the Name field in the license asset. Accepts wildcards. E.g. @("Acrobat *")
 $OverviewDocumentName = "Autodesk/AutoCAD Licensing Overview" # This name should be unique (within the organization)
 $Description = "Creates a license overview table for a specific application."
+$ImageURLs = @{
+    'Free Seats' = "https://www.seatosky.com/wp-content/uploads/2022/09/seat.png"
+    'Seats To Fix' = "https://www.seatosky.com/wp-content/uploads/2022/09/fix.png"
+}
 ####################################################################
 
 # Ensure they are using the latest TLS version
@@ -51,9 +55,80 @@ $FullConfigurationsList = (Get-ITGlueConfigurations -page_size 1000 -organizatio
 Write-Host "Downloading all ITG contacts"
 $FullContactsList = (Get-ITGlueContacts -page_size 1000 -organization_id $OrgID).data
 
+function New-BootstrapSinglePanel {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [ValidateSet('active', 'success', 'info', 'warning', 'danger', 'blank')]
+        [string]$PanelShading,
+        
+        [Parameter(Mandatory)]
+        [string]$PanelTitle,
+
+        [Parameter(Mandatory)]
+        [string]$PanelContent,
+
+        [switch]$ContentAsBadge,
+
+        [string]$PanelAdditionalDetail,
+
+        [Parameter(Mandatory)]
+        [int]$PanelSize = 3
+    )
+    
+    if ($PanelShading -ne 'Blank') {
+        $PanelStart = "<div class=`"col-sm-$PanelSize`"><div class=`"panel panel-$PanelShading`">"
+    }
+    else {
+        $PanelStart = "<div class=`"col-sm-$PanelSize`"><div class=`"panel`">"
+    }
+
+    $PanelTitle = "<div class=`"panel-heading`"><h3 class=`"panel-title text-center`">$PanelTitle</h3></div>"
+
+
+    if ($PSBoundParameters.ContainsKey('ContentAsBadge')) {
+        $PanelContent = "<div class=`"panel-body text-center`"><h4><span class=`"label label-$PanelShading`">$PanelContent</span></h4>$PanelAdditionalDetail</div>"
+    }
+    else {
+        $PanelContent = "<div class=`"panel-body text-center`"><h4>$PanelContent</h4>$PanelAdditionalDetail</div>"
+    }
+    $PanelEnd = "</div></div>"
+    $FinalPanelHTML = "{0}{1}{2}{3}" -f $PanelStart, $PanelTitle, $PanelContent, $PanelEnd
+    return $FinalPanelHTML
+    
+}
+    
+function New-AtAGlancecard {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [ValidateSet('active', 'success', 'info', 'warning', 'danger', 'blank')]
+        [string]$PanelShading,
+
+        [Parameter(Mandatory)]
+        [string]$PanelContent,
+
+        [Parameter(Mandatory)]
+        [string]$ImageURL,
+
+        [Parameter(Mandatory = $false)]
+        [string]$PanelAdditionalDetail = ""
+    )
+
+	New-BootstrapSinglePanel -PanelShading $PanelShading -PanelTitle "<img class=`"img-responsive`" style=`"height: 5vw; margin-left: auto; margin-right: auto;`" src=`"$ImageURL`">" -PanelContent $PanelContent -PanelAdditionalDetail $PanelAdditionalDetail -ContentAsBadge -PanelSize 4
+}
+
+Function IIf($If, $Then, $Else) {
+    If ($If -IsNot "Boolean") {$_ = $If}
+    If ($If) {If ($Then -is "ScriptBlock") {&$Then} Else {$Then}}
+    Else {If ($Else -is "ScriptBlock") {&$Else} Else {$Else}}
+}
+
 # Now we loop through all existing licenses and build the overview
 $i = 0
 $LicenseOverview = @()
+$TotalFreeSeats = 0
+$TotalSeatsToFix = 0
 foreach ($ExistingLicense in $ExistingLicenses) {
 	$i++
 	[int]$PercentComplete = $i / $LicenseCount * 100
@@ -102,12 +177,14 @@ foreach ($ExistingLicense in $ExistingLicenses) {
 	}
 
 	if ($FreeSeats -gt 0) {
+		$TotalFreeSeats += $FreeSeats
 		$FreeSeats = "<span style='background-color:#ffd700;'>$FreeSeats</span>"
 	}
 	$Overview."Free Seats" = $FreeSeats
 
 	if ($ToFixCount -gt 0) {
 		$Overview."Seats To Fix" = $ToFixCount
+		$TotalSeatsToFix += $ToFixCount
 		$Overview."To Fix" = [System.Net.WebUtility]::HtmlEncode(($ToFixNames -join ", "))
 	}
 
@@ -165,6 +242,8 @@ if ($OverviewDocumentName -and $LicenseOverview) {
 	$Overview = $Overview -replace "Seats To Fix", "Seats To Fix <span style='color:#ff0000;'>*</span>"
 	$Overview = $Overview + "<div><br></div>
 		<div><span style='color:#ff0000;'><strong>*</strong></span> These are computers that have been archived yet are still licensed for this application. We should verify the bad device (marked in red on the license asset) was decommissioned, and if so, unassign the license.</div>"
+	$ATaGlanceHTML = New-AtAGlancecard -PanelShading (IIf ($TotalFreeSeats -gt 0) "success" "danger") -PanelContent ("Free Seats: " + ($TotalFreeSeats | Out-String)) -ImageURL $ImageURLs['Free Seats']
+	$ATaGlanceHTML += New-AtAGlancecard -PanelShading (IIf ($TotalSeatsToFix -eq 0) "success" "warning") -PanelContent ("Seats to Fix: " + ($TotalSeatsToFix | Out-String)) -ImageURL $ImageURLs['Seats To Fix']
 	
 	$FlexAssetBody = 
 	@{
@@ -172,6 +251,7 @@ if ($OverviewDocumentName -and $LicenseOverview) {
 		attributes = @{
 				traits = @{
 					"name" = $OverviewDocumentName
+					"at-a-glance" = ($ATaGlanceHTML | Out-String)
 					"overview" = [System.Web.HttpUtility]::HtmlDecode($Overview)
 				}
 		}

@@ -11,6 +11,10 @@ $OtherEmails = @() # Any other emails bluebeam might be licensed under
 $ApplicationID = @() # The ID for the Bluebeam application to tag
 $OverviewDocument = $false # Create a custom overview asset for a license overview and paste the ID here, or false to not update this
 $Description = "Updates the Bluebeam licenses in ITG. Note, it will not create new licenses, it grabs the product key / serial's from the licenses already in ITG and updates the info for each."
+$ImageURLs = @{
+    'Free Seats' = "https://www.seatosky.com/wp-content/uploads/2022/09/seat.png"
+    'Seats To Fix' = "https://www.seatosky.com/wp-content/uploads/2022/09/fix.png"
+}
 ####################################################################
 
 # Ensure they are using the latest TLS version
@@ -61,10 +65,81 @@ function GetFormNonce($WebSession) {
 	return
 }
 
+function New-BootstrapSinglePanel {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [ValidateSet('active', 'success', 'info', 'warning', 'danger', 'blank')]
+        [string]$PanelShading,
+        
+        [Parameter(Mandatory)]
+        [string]$PanelTitle,
+
+        [Parameter(Mandatory)]
+        [string]$PanelContent,
+
+        [switch]$ContentAsBadge,
+
+        [string]$PanelAdditionalDetail,
+
+        [Parameter(Mandatory)]
+        [int]$PanelSize = 3
+    )
+    
+    if ($PanelShading -ne 'Blank') {
+        $PanelStart = "<div class=`"col-sm-$PanelSize`"><div class=`"panel panel-$PanelShading`">"
+    }
+    else {
+        $PanelStart = "<div class=`"col-sm-$PanelSize`"><div class=`"panel`">"
+    }
+
+    $PanelTitle = "<div class=`"panel-heading`"><h3 class=`"panel-title text-center`">$PanelTitle</h3></div>"
+
+
+    if ($PSBoundParameters.ContainsKey('ContentAsBadge')) {
+        $PanelContent = "<div class=`"panel-body text-center`"><h4><span class=`"label label-$PanelShading`">$PanelContent</span></h4>$PanelAdditionalDetail</div>"
+    }
+    else {
+        $PanelContent = "<div class=`"panel-body text-center`"><h4>$PanelContent</h4>$PanelAdditionalDetail</div>"
+    }
+    $PanelEnd = "</div></div>"
+    $FinalPanelHTML = "{0}{1}{2}{3}" -f $PanelStart, $PanelTitle, $PanelContent, $PanelEnd
+    return $FinalPanelHTML
+    
+}
+    
+function New-AtAGlancecard {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [ValidateSet('active', 'success', 'info', 'warning', 'danger', 'blank')]
+        [string]$PanelShading,
+
+        [Parameter(Mandatory)]
+        [string]$PanelContent,
+
+        [Parameter(Mandatory)]
+        [string]$ImageURL,
+
+        [Parameter(Mandatory = $false)]
+        [string]$PanelAdditionalDetail = ""
+    )
+
+	New-BootstrapSinglePanel -PanelShading $PanelShading -PanelTitle "<img class=`"img-responsive`" style=`"height: 5vw; margin-left: auto; margin-right: auto;`" src=`"$ImageURL`">" -PanelContent $PanelContent -PanelAdditionalDetail $PanelAdditionalDetail -ContentAsBadge -PanelSize 4
+}
+
+Function IIf($If, $Then, $Else) {
+    If ($If -IsNot "Boolean") {$_ = $If}
+    If ($If) {If ($Then -is "ScriptBlock") {&$Then} Else {$Then}}
+    Else {If ($Else -is "ScriptBlock") {&$Else} Else {$Else}}
+}
+
 # Now we loop through all exiting bluebeam licenses and get the updated info for them
 $i = 0
 $LicenseOverview = @()
 $UpdatedLicenses = 0
+$TotalFreeSeats = 0
+$TotalSeatsToFix = 0
 foreach ($ExistingLicense in $ExistingLicenses) {
 	$i++
 	[int]$PercentComplete = $i / $LicenseCount * 100
@@ -241,6 +316,7 @@ foreach ($ExistingLicense in $ExistingLicenses) {
 
 	$FreeSeats = ([int]$LicenseInfo."Users Allowed" - [int]$LicenseInfo.'Users Installed')
 	if ($FreeSeats -gt 0) {
+		$TotalFreeSeats += $FreeSeats
 		$FreeSeats = "<span style='background-color:#ffd700;'>$FreeSeats</span>"
 	}
 	$Overview."Free Seats" = $FreeSeats
@@ -327,6 +403,7 @@ foreach ($ExistingLicense in $ExistingLicenses) {
 		}
 
 		if ($SeatsToFix -gt 0) {
+			$TotalSeatsToFix += $SeatsToFix
 			$Overview."Seats To Fix" = $SeatsToFix
 		}
 
@@ -336,7 +413,7 @@ foreach ($ExistingLicense in $ExistingLicenses) {
 			$RenewalDate = $LicenseInfo.Expiration.ToString("yyyy-MM-dd")
 		}
 
-		Remove-Variable FlexAssetBody
+		Remove-Variable FlexAssetBody -ErrorAction SilentlyContinue
 		$FlexAssetBody = 
 		@{
 			type = 'flexible-assets'
@@ -403,42 +480,45 @@ if ($OverviewDocument -and $LicenseOverview) {
 	$Overview = $Overview -replace "Seats To Fix", "Seats To Fix <span style='color:#ff0000;'>*</span>"
 	$Overview = $Overview + "<div><br></div>
 		<div><span style='color:#ff0000;'><strong>*</strong></span> These are computers that have been archived yet are still licensed for Bluebeam. We should verify the bad device (marked in red on the license asset) was decommissioned, and if so, contact Bluebeam to remove it from the license.</div>"
+		$ATaGlanceHTML = New-AtAGlancecard -PanelShading (IIf ($TotalFreeSeats -gt 0) "success" "danger") -PanelContent ("Free Seats: " + ($TotalFreeSeats | Out-String)) -ImageURL $ImageURLs['Free Seats']
+		$ATaGlanceHTML += New-AtAGlancecard -PanelShading (IIf ($TotalSeatsToFix -eq 0) "success" "warning") -PanelContent ("Seats to Fix: " + ($TotalSeatsToFix | Out-String)) -ImageURL $ImageURLs['Seats To Fix']
 	
-		Remove-Variable FlexAssetBody
-		$FlexAssetBody = 
-		@{
-			type = 'flexible-assets'
-			attributes = @{
-					traits = @{
-						"name" = "Bluebeam License Overview"
-						"overview" = [System.Web.HttpUtility]::HtmlDecode($Overview)
-					}
-			}
+	Remove-Variable FlexAssetBody -ErrorAction SilentlyContinue
+	$FlexAssetBody = 
+	@{
+		type = 'flexible-assets'
+		attributes = @{
+				traits = @{
+					"name" = "Bluebeam License Overview"
+					"at-a-glance" = ($ATaGlanceHTML | Out-String)
+					"overview" = [System.Web.HttpUtility]::HtmlDecode($Overview)
+				}
 		}
-		Set-ITGlueFlexibleAssets -id $OverviewDocument -data $FlexAssetBody
+	}
+	Set-ITGlueFlexibleAssets -id $OverviewDocument -data $FlexAssetBody
 
-		$RelatedItemsBody = @()
-		foreach ($AppID in $ApplicationID) {
-			$RelatedItemsBody +=
-			@{
-				type = 'related_items'
-				attributes = @{
-					'destination_id' = $AppID
-					'destination_type' = "Flexible Asset"
-				}
+	$RelatedItemsBody = @()
+	foreach ($AppID in $ApplicationID) {
+		$RelatedItemsBody +=
+		@{
+			type = 'related_items'
+			attributes = @{
+				'destination_id' = $AppID
+				'destination_type' = "Flexible Asset"
 			}
 		}
-		foreach ($ExistingLicense in $ExistingLicenses) {
-			$RelatedItemsBody +=
-			@{
-				type = 'related_items'
-				attributes = @{
-					'destination_id' = $ExistingLicense.id
-					'destination_type' = "Flexible Asset"
-				}
+	}
+	foreach ($ExistingLicense in $ExistingLicenses) {
+		$RelatedItemsBody +=
+		@{
+			type = 'related_items'
+			attributes = @{
+				'destination_id' = $ExistingLicense.id
+				'destination_type' = "Flexible Asset"
 			}
 		}
-		New-ITGlueRelatedItems -resource_type 'flexible_assets' -resource_id $OverviewDocument -data $RelatedItemsBody
+	}
+	New-ITGlueRelatedItems -resource_type 'flexible_assets' -resource_id $OverviewDocument -data $RelatedItemsBody
 }
 
 # Update / Create the "Scripts - Last Run" ITG page which shows when this AutoDoc (and other scripts) last ran
