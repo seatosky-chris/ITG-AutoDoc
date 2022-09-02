@@ -2,6 +2,8 @@
 
 This is a collection of scripts for IT Glue that provide automatic documentation. All of these scripts (not including helper scripts) can be scheduled to run daily or weekly to keep the documentation up-to-date.
 
+Note: Some of these scripts include a number of images that are used in the *At a Glance* section. These are hosted on a server that does not allow hotlinking. If you wish to use these you will need to re-host them.
+
 ### AD Groups
 This script will document Active Directory Security Groups. It must be ran from the customer's AD server. For this to work they must be using a local Active Directory server. It will not work with Azure AD. If they have a large amount of AD Groups it can take a very long time to run. To set it up you must fill in the IT Glue API key, endpoint url, and the customers ITG organization ID. For each security group it will create a new asset. It will do its best to categorize the group and it will tag any parent/child groups as well as member users. The script will take care of adding all AD groups as well as keeping them updated. It will try to add all of the data it can but if necessary, you can manually edit things like the group type, group description, folder details, who to add (only manual), approver for access (only manual), and the group details. For the sync to work, the GUID must be correct in the ITG asset. If you do not want it to add new groups, you can change `$UpdateOnly` to `$true`. This script uses a dictionary which you must unzip from the `DictionaryAlphabetJSON.zip` file.
 
@@ -20,8 +22,6 @@ To set it up you must fill in the IT Glue API key, endpoint url, and the custome
 
 ### Hyper-V
 This script will document the Hyper-V setup on a server. It must be ran from the Hyper-V server itself. To set it up you must fill in the IT Glue API key, endpoint url, and the customers ITG organization ID. It will get as much data as it can about the Hyper-V configuration and update the asset with this info. Values include: host name, host device, a table of all the VM's with their state, settings & resources, a table of network settings including switches, network adapters & replication settings, and a table of host settings. This script will overwrite any existing data. Additionally, it can update a Virtualizations/Cluster asset which contains an overview of the Hyper-V setup. For this to work, the title of the corresponding Virtualization's page must contain the name of that Hyper-V host or the name of the Cluster.
-
-Note: This script includes a number of images that are used in the *At a Glance* section. These are hosted on a server that does not allow hotlinking. If you wish to use these you will need to re-host them.
 
 ### Licensing Overview
 This script will create a license overview that contains a table of all the licenses of a certain type including how many free seats are available. This same overview is built in to the Bluebeam Licensing script. This script can be ran from any device. To set it up you must fill in the IT Glue API key, endpoint url, the customers ITG organization ID, and the ITG base url. Additionally configure the `$LicenseNames` array to include the names of all licenses you want in this overview and a unique `$OverviewDocumentName` name. To create multiple overviews for different license types, create multiple instances of this script. 
