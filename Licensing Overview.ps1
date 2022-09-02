@@ -13,6 +13,7 @@ $ImageURLs = @{
     'Free Seats' = "https://www.seatosky.com/wp-content/uploads/2022/09/seat.png"
     'Seats To Fix' = "https://www.seatosky.com/wp-content/uploads/2022/09/fix.png"
 }
+$SquareImages = @('Free Seats', 'Seats To Fix')
 ####################################################################
 
 # Ensure they are using the latest TLS version
@@ -102,8 +103,7 @@ function New-AtAGlancecard {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory)]
-        [ValidateSet('active', 'success', 'info', 'warning', 'danger', 'blank')]
-        [string]$PanelShading,
+        [boolean]$Enabled,
 
         [Parameter(Mandatory)]
         [string]$PanelContent,
@@ -112,10 +112,32 @@ function New-AtAGlancecard {
         [string]$ImageURL,
 
         [Parameter(Mandatory = $false)]
-        [string]$PanelAdditionalDetail = ""
+        [string]$PanelAdditionalDetail = "",
+
+        [Parameter(Mandatory = $false)]
+        [bool]$PanelShadingOverride = $false,
+
+        [Parameter(Mandatory = $false)]
+        [ValidateSet('active', 'success', 'info', 'warning', 'danger', 'blank', '')]
+        [string]$PanelShading,
+
+        [Parameter(Mandatory = $false)]
+        [int]$PanelSize = 3,
+
+        [Parameter(Mandatory = $false)]
+        [boolean]$SquareIcon = $false
     )
 
-	New-BootstrapSinglePanel -PanelShading $PanelShading -PanelTitle "<img class=`"img-responsive`" style=`"height: 5vw; margin-left: auto; margin-right: auto;`" src=`"$ImageURL`">" -PanelContent $PanelContent -PanelAdditionalDetail $PanelAdditionalDetail -ContentAsBadge -PanelSize 4
+    $Style = ""
+    if ($SquareIcon) {
+        $Style = "style=`"height: 5vw; margin-left: auto; margin-right: auto;`""
+    }
+
+    if ($enabled) {
+        New-BootstrapSinglePanel -PanelShading (IIf $PanelShadingOverride $PanelShading "success") -PanelTitle "<img class=`"img-responsive`" $Style src=`"$ImageURL`">" -PanelContent $PanelContent -PanelAdditionalDetail $PanelAdditionalDetail -ContentAsBadge -PanelSize $PanelSize
+    } else {
+        New-BootstrapSinglePanel -PanelShading (IIf $PanelShadingOverride $PanelShading "danger") -PanelTitle "<img class=`"img-responsive`" $Style src=`"$ImageURL`">" -PanelContent $PanelContent -PanelAdditionalDetail $PanelAdditionalDetail -ContentAsBadge -PanelSize $PanelSize
+    }
 }
 
 Function IIf($If, $Then, $Else) {
@@ -232,18 +254,23 @@ if (($LicenseOverview."Purchased By" | Where-Object { $_ } | Measure-Object).Cou
 
 # Now lets update the overview document
 if ($OverviewDocumentName -and $LicenseOverview) {
+	$TableHeader = "<table class=`"table table-bordered table-hover`">"
+	$Whitespace = "<br/>"
+	$TableStyling = "<th>", "<th class='bg-info'>"
+
 	# Get the overview documents ID if it exists
 	$FilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $OverviewFlexAssetName).data
 	$ExistingOverview = (Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $FilterID.id -filter_organization_id $orgID -filter_name $OverviewDocumentName).data
 
 	$ApplicationIDs = $ExistingLicenses.attributes.traits.application.values.id | Select-Object -Unique
 
-	$Overview = $LicenseOverview | ConvertTo-Html -Fragment
+	$OverviewRaw = $LicenseOverview | ConvertTo-Html -Fragment | Select-Object -Skip 1
+	$Overview = $TableHeader + ($OverviewRaw -replace $TableStyling) + $Whitespace
 	$Overview = $Overview -replace "Seats To Fix", "Seats To Fix <span style='color:#ff0000;'>*</span>"
 	$Overview = $Overview + "<div><br></div>
 		<div><span style='color:#ff0000;'><strong>*</strong></span> These are computers that have been archived yet are still licensed for this application. We should verify the bad device (marked in red on the license asset) was decommissioned, and if so, unassign the license.</div>"
-	$ATaGlanceHTML = New-AtAGlancecard -PanelShading (IIf ($TotalFreeSeats -gt 0) "success" "danger") -PanelContent ("Free Seats: " + ($TotalFreeSeats | Out-String)) -ImageURL $ImageURLs['Free Seats']
-	$ATaGlanceHTML += New-AtAGlancecard -PanelShading (IIf ($TotalSeatsToFix -eq 0) "success" "warning") -PanelContent ("Seats to Fix: " + ($TotalSeatsToFix | Out-String)) -ImageURL $ImageURLs['Seats To Fix']
+	$ATaGlanceHTML = New-AtAGlancecard -Enabled $true -PanelShadingOverride $true -PanelShading (IIf ($TotalFreeSeats -gt 0) "success" "danger") -PanelContent ("Free Seats: " + ($TotalFreeSeats | Out-String)) -ImageURL $ImageURLs['Free Seats'] -SquareIcon (IIf ('Free Seats' -in $SquareImages) $true $false) -PanelSize 4
+	$ATaGlanceHTML += New-AtAGlancecard -Enabled $true -PanelShadingOverride $true -PanelShading (IIf ($TotalSeatsToFix -eq 0) "success" "warning") -PanelContent ("Seats to Fix: " + ($TotalSeatsToFix | Out-String)) -ImageURL $ImageURLs['Seats To Fix'] -SquareIcon (IIf ('Seats To Fix' -in $SquareImages) $true $false) -PanelSize 4
 	
 	$FlexAssetBody = 
 	@{

@@ -10,7 +10,7 @@ $Description = "A network one-page document that displays the current Hyper-V Se
 # some layout options, change if you want colours to be different or do not like the whitespace.
 $TableHeader = "<table class=`"table table-bordered table-hover`" style=`"width:80%`">"
 $Whitespace = "<br/>"
-$TableStyling = "<th>", "<th style=`"background-color:#4CAF50`">"
+$TableStyling = "<th>", "<th class=`"bg-info`">"
 $ImageURLs = @{
     'Hyper-V Server' = "https://www.seatosky.com/wp-content/uploads/2022/08/Hyper-V-server.png"
     'Hyper-V Replicas' = "https://www.seatosky.com/wp-content/uploads/2022/08/hyper-v-replication.png"
@@ -18,6 +18,7 @@ $ImageURLs = @{
     'Dell Server' = "https://www.seatosky.com/wp-content/uploads/2022/08/Dell-logo2.png"
 	'Info' = "https://www.seatosky.com/wp-content/uploads/2022/08/DetailsIcon.png"
 }
+$SquareImages = @('Info')
 ########################## IT-Glue ############################
 
 # Ensure they are using the latest TLS version
@@ -53,6 +54,12 @@ while ($Configurations.links.next) {
 	$Configurations.links = $Configurations_Next.links
 }
 $Configurations = $Configurations.data
+
+Function IIf($If, $Then, $Else) {
+    If ($If -IsNot "Boolean") {$_ = $If}
+    If ($If) {If ($Then -is "ScriptBlock") {&$Then} Else {$Then}}
+    Else {If ($Else -is "ScriptBlock") {&$Else} Else {$Else}}
+}
 
 function New-BootstrapSinglePanel {
     [CmdletBinding()]
@@ -112,16 +119,29 @@ function New-AtAGlancecard {
         [Parameter(Mandatory = $false)]
         [string]$PanelAdditionalDetail = "",
 
-		[Parameter(Mandatory = $false)]
-        [boolean]$InfoShading = $false
+        [Parameter(Mandatory = $false)]
+        [bool]$PanelShadingOverride = $false,
+
+        [Parameter(Mandatory = $false)]
+        [ValidateSet('active', 'success', 'info', 'warning', 'danger', 'blank', '')]
+        [string]$PanelShading,
+
+        [Parameter(Mandatory = $false)]
+        [int]$PanelSize = 3,
+
+        [Parameter(Mandatory = $false)]
+        [boolean]$SquareIcon = $false
     )
 
-	if ($InfoShading) {
-		New-BootstrapSinglePanel -PanelShading "info" -PanelTitle "<img class=`"img-responsive`" style=`"height: 5vw; margin-left: auto; margin-right: auto;`" src=`"$($ImageURLs.Info)`">" -PanelContent $PanelContent -PanelAdditionalDetail $PanelAdditionalDetail -ContentAsBadge -PanelSize 3
-    } elseif ($enabled) {
-        New-BootstrapSinglePanel -PanelShading "success" -PanelTitle "<img class=`"img-responsive`" src=`"$ImageURL`">" -PanelContent $PanelContent -PanelAdditionalDetail $PanelAdditionalDetail -ContentAsBadge -PanelSize 3
+    $Style = ""
+    if ($SquareIcon) {
+        $Style = "style=`"height: 5vw; margin-left: auto; margin-right: auto;`""
+    }
+
+    if ($enabled) {
+        New-BootstrapSinglePanel -PanelShading (IIf $PanelShadingOverride $PanelShading "success") -PanelTitle "<img class=`"img-responsive`" $Style src=`"$ImageURL`">" -PanelContent $PanelContent -PanelAdditionalDetail $PanelAdditionalDetail -ContentAsBadge -PanelSize $PanelSize
     } else {
-        New-BootstrapSinglePanel -PanelShading "danger" -PanelTitle "<img class=`"img-responsive`" src=`"$ImageURL`">" -PanelContent $PanelContent -PanelAdditionalDetail $PanelAdditionalDetail -ContentAsBadge -PanelSize 3
+        New-BootstrapSinglePanel -PanelShading (IIf $PanelShadingOverride $PanelShading "danger") -PanelTitle "<img class=`"img-responsive`" $Style src=`"$ImageURL`">" -PanelContent $PanelContent -PanelAdditionalDetail $PanelAdditionalDetail -ContentAsBadge -PanelSize $PanelSize
     }
 }
  
@@ -187,7 +207,7 @@ $ATaGlanceHTML = foreach ($Hash in $AtAGlanceHash.GetEnumerator()) {
         }
     }
     
-    New-AtAGlancecard -Enabled $hash.value -PanelContent $hash.name -ImageURL $ImageURLs[$hash.name] -PanelAdditionalDetail $AdditionalDetails    
+    New-AtAGlancecard -Enabled $hash.value -PanelContent $hash.name -ImageURL $ImageURLs[$hash.name] -PanelAdditionalDetail $AdditionalDetails -SquareIcon (IIf ($Hash.name -in $SquareImages) $true $false)  
 }
 
 $PhysicalConfig = if ($AtAGlanceHash.'Dell server' -eq $true) {
@@ -357,9 +377,9 @@ foreach ($ExistingAsset in $ExistingClusterFlexAsset) {
 			}
 			
 			if ($Hash.name -eq "Host Details") {
-				New-AtAGlancecard -Enabled $hash.value -PanelContent $hash.name -ImageURL $ImageURLs.Info -PanelAdditionalDetail $AdditionalDetails -InfoShading $true
+				New-AtAGlancecard -Enabled $hash.value -PanelContent $hash.name -ImageURL $ImageURLs.Info -PanelAdditionalDetail $AdditionalDetails -PanelShadingOverride $true -PanelShading "info" -SquareIcon (IIf ('Info' -in $SquareImages) $true $false) 
 			} else {
-				New-AtAGlancecard -Enabled $hash.value -PanelContent $hash.name -ImageURL $ImageURLs[$hash.name] -PanelAdditionalDetail $AdditionalDetails
+				New-AtAGlancecard -Enabled $hash.value -PanelContent $hash.name -ImageURL $ImageURLs[$hash.name] -PanelAdditionalDetail $AdditionalDetails -SquareIcon (IIf ($Hash.name -in $SquareImages) $true $false) 
 			}
 		}
 
@@ -411,9 +431,9 @@ foreach ($ExistingAsset in $ExistingClusterFlexAsset) {
 			}
 			
 			if ($Hash.name -eq "Host Details") {
-				New-AtAGlancecard -Enabled $hash.value -PanelContent $hash.name -ImageURL $ImageURLs.Info -PanelAdditionalDetail $AdditionalDetails -InfoShading $true
+				New-AtAGlancecard -Enabled $hash.value -PanelContent $hash.name -ImageURL $ImageURLs.Info -PanelAdditionalDetail $AdditionalDetails -PanelShadingOverride $true -PanelShading "info" -SquareIcon (IIf ('Info' -in $SquareImages) $true $false) 
 			} else {
-				New-AtAGlancecard -Enabled $hash.value -PanelContent $hash.name -ImageURL $ImageURLs[$hash.name] -PanelAdditionalDetail $AdditionalDetails
+				New-AtAGlancecard -Enabled $hash.value -PanelContent $hash.name -ImageURL $ImageURLs[$hash.name] -PanelAdditionalDetail $AdditionalDetails -SquareIcon (IIf ($Hash.name -in $SquareImages) $true $false) 
 			}
 		}
 

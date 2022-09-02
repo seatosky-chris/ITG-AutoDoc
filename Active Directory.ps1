@@ -22,6 +22,7 @@ $ImageURLs = @{
     'Dell Server' = "https://www.seatosky.com/wp-content/uploads/2022/08/Dell-logo2.png"
 	'Site Details' = "https://www.seatosky.com/wp-content/uploads/2022/08/DetailsIcon.png"
 }
+$SquareImages = @('DNS Server', 'Password Complexity Requirements', 'Site Details')
 #####################################################################
 
 # Ensure they are using the latest TLS version
@@ -108,8 +109,15 @@ function New-AtAGlancecard {
         [Parameter(Mandatory = $false)]
         [string]$PanelAdditionalDetail = "",
 
-		[Parameter(Mandatory = $false)]
-        [boolean]$InfoShading = $false,
+        [Parameter(Mandatory = $false)]
+        [bool]$PanelShadingOverride = $false,
+
+        [Parameter(Mandatory = $false)]
+        [ValidateSet('active', 'success', 'info', 'warning', 'danger', 'blank', '')]
+        [string]$PanelShading,
+
+        [Parameter(Mandatory = $false)]
+        [int]$PanelSize = 3,
 
         [Parameter(Mandatory = $false)]
         [boolean]$SquareIcon = $false
@@ -120,12 +128,10 @@ function New-AtAGlancecard {
         $Style = "style=`"height: 5vw; margin-left: auto; margin-right: auto;`""
     }
 
-	if ($InfoShading) {
-		New-BootstrapSinglePanel -PanelShading "info" -PanelTitle "<img class=`"img-responsive`" $Style src=`"$ImageURL`">" -PanelContent $PanelContent -PanelAdditionalDetail $PanelAdditionalDetail -ContentAsBadge -PanelSize 4
-    } elseif ($enabled) {
-        New-BootstrapSinglePanel -PanelShading "success" -PanelTitle "<img class=`"img-responsive`" $Style src=`"$ImageURL`">" -PanelContent $PanelContent -PanelAdditionalDetail $PanelAdditionalDetail -ContentAsBadge -PanelSize 4
+    if ($enabled) {
+        New-BootstrapSinglePanel -PanelShading (IIf $PanelShadingOverride $PanelShading "success") -PanelTitle "<img class=`"img-responsive`" $Style src=`"$ImageURL`">" -PanelContent $PanelContent -PanelAdditionalDetail $PanelAdditionalDetail -ContentAsBadge -PanelSize $PanelSize
     } else {
-        New-BootstrapSinglePanel -PanelShading "danger" -PanelTitle "<img class=`"img-responsive`" $Style src=`"$ImageURL`">" -PanelContent $PanelContent -PanelAdditionalDetail $PanelAdditionalDetail -ContentAsBadge -PanelSize 4
+        New-BootstrapSinglePanel -PanelShading (IIf $PanelShadingOverride $PanelShading "danger") -PanelTitle "<img class=`"img-responsive`" $Style src=`"$ImageURL`">" -PanelContent $PanelContent -PanelAdditionalDetail $PanelAdditionalDetail -ContentAsBadge -PanelSize $PanelSize
     }
 }
   
@@ -411,7 +417,7 @@ $ATaGlanceHTML = foreach ($Hash in $AtAGlanceHash.GetEnumerator()) {
         }
     }
     
-    New-AtAGlancecard -Enabled $hash.value -PanelContent $hash.name -ImageURL (IIf $DomainLevelImage $DomainLevelImage $ImageURLs[$hash.name]) -PanelAdditionalDetail $AdditionalDetails -SquareIcon ($Hash.name -notin @("Dell Server", "DHCP Server")) -InfoShading ($Hash.name -eq "Site Details")
+    New-AtAGlancecard -Enabled $hash.value -PanelContent $hash.name -ImageURL (IIf $DomainLevelImage $DomainLevelImage $ImageURLs[$hash.name]) -PanelAdditionalDetail $AdditionalDetails -SquareIcon (IIf ($Hash.name -in $SquareImages) $true $false) -PanelShadingOverride (IIf ($Hash.name -eq "Site Details") $true $false) -PanelShading (IIf ($Hash.name -eq "Site Details") 'info') -PanelSize 4
     $i++
     if ($i % 3 -eq 0) {
         "</div><div class='row'>"
