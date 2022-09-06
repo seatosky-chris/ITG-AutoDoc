@@ -341,11 +341,11 @@ foreach ($Server in $AllDHCPServers) {
         $Lookup = [System.Net.Dns]::GetHostbyAddress($Server.IPAddress.IPAddressToString)
     } catch {}
     if ($Lookup) {
-        $Hostname = ($Lookup.Hostname.replace($RawAD.ForestName, "")).Trim(".")
+        $Hostname = ($Lookup.Hostname -replace $RawAD.ForestName, "").Trim(".")
         $DHCPAsset = $Configurations | Where-Object { $_.attributes.Name -like $Hostname }
         if (!$DHCPAsset) {
-            $Hostname = ($Lookup.Hostname -split ".")[0]
-            $DHCPAsset = $Configurations | Where-Object { $_.attributes.Name -like $Hostname -or $_.attributes.'primary-ip' -like $Server.IPAddress.IPAddressToString }
+            $Hostname = ($Lookup.Hostname.Split("."))[0]
+            $DHCPAsset = $Configurations | Where-Object { $_.attributes.Name -like $Hostname -or $_.attributes.'primary-ip' -like $Server.IPAddress.ToString() }
         }
         if ($DHCPAsset) {
             $DHCPServers += $DHCPAsset
@@ -361,11 +361,11 @@ foreach ($Server in $AllDNSServers) {
         $Lookup = [System.Net.Dns]::GetHostbyAddress($Server.IPAddress)
     } catch {}
     if ($Lookup) {
-        $Hostname = ($Lookup.Hostname.replace($RawAD.ForestName, "")).Trim(".")
+        $Hostname = ($Lookup.Hostname -replace $RawAD.ForestName, "").Trim(".")
         $DNSAsset = $Configurations | Where-Object { $_.attributes.Name -like $Hostname }
         if (!$DNSAsset) {
-            $Hostname = ($Lookup.Hostname -split ".")[0]
-            $DNSAsset = $Configurations | Where-Object { $_.attributes.Name -like $Hostname -or $_.attributes.'primary-ip' -like $Server.IPAddress.IPAddressToString }
+            $Hostname = ($Lookup.Hostname.Split("."))[0]
+            $DNSAsset = $Configurations | Where-Object { $_.attributes.Name -like $Hostname -or $_.attributes.'primary-ip' -like $Server.IPAddress.ToString() }
         }
         if ($DNSAsset) {
             $DNSServers += $DNSAsset
