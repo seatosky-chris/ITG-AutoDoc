@@ -13,6 +13,13 @@ This script will document the Active Directory setup. It must be ran from the cu
 ### Bluebeam Licensing
 This script will update existing Bluebeam license details by using the Bluebeam registration lookup website. It will query the site based on the existing serial and product keys. You must add an asset with this info to ITG first for it to keep the asset up-to-date. This script can be ran from any device. To set it up you must fill in the IT Glue API key, endpoint url, the customers ITG organization ID, and the ITG base url. Additionally, you must setup the primary email used for Bluebeam licensing (and optionally any other emails that may have been used). Optionally, you can also include an Application ID to auto-tag the licenses to the Bluebeam app, and a Overview Document ID, to keep a summary of Bluebeam licenses. The script will keep the license details up-to-date including: renewal date, seats available (total the license can have), seats free, seats used, and a list of devices that are using that license. It will tag those devices to the license as related items. If setup, it will also update a license overview that contains a table of all the Bluebeam licenses and how many free seats are available. 
 
+### Datto Backups (BCDR)
+This script will create and update a Backup asset for each Datto BCDR in your partner portal. This does not need to be setup on a customer server and can be ran from anywhere. This can be setup with a global ITG api key and a Datto Backups API key and be ran for all customers in one go. It will run through each BCDR's organization and try to match them to an ITG organization, if it cannot, you will be prompted to make a match manually. It will then get the BCDR's info and the protected devices from the API, update the Backup asset in ITG, and tag the protected devices to the Backup asset. You can get your Datto API key by logging into the Datto Backup Portal then navigating to Admin > Integrations. Enable the REST API and use the Public and Secret key's generated.
+
+Note that this script cannot update the Local Retention Period or the IPMI IP address, those still need to be documented manually.
+
+If you are running this from the Task Scheduler, be sure to set the Action's "Start In" value to the location that the script is running from. This is required for relative path references for the forms and json matching file.
+
 ### File Shares
 This script can update Windows file shares in ITG. It must be setup on every server you want to document the shares on. There are 2 versions of this script:
 1. If the customer has a single server, use the `File Shares.ps1` script. This will document the file shares on that server and pull AD GPO info.
