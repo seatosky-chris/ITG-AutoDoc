@@ -406,6 +406,49 @@ function loadForm($Path) {
 	return $Form
 }
 
+function Parse-JsonFileAsHash([string]$file) {
+	$text = Get-Content -Raw -Path $file
+	$parser = New-Object Web.Script.Serialization.JavaScriptSerializer
+	$parser.MaxJsonLength = $text.length
+	return $parser.Deserialize($text, @{}.GetType())
+}
+
+function Set-CachedScreenshotData($CompanyName, $ServerName, $ScreenshotData) {
+	$CachedScreenshots = @{}
+	if (Test-Path -Path "datto_backup_cached_screenshots.json" -PathType Leaf) {
+		$CachedScreenshots = Parse-JsonFileAsHash "datto_backup_cached_screenshots.json"
+		if (!$CachedScreenshots) {
+			$CachedScreenshots = @{}
+		}
+	}
+
+	$ScreenShotdata.Timestamp = [DateTime]::UtcNow
+	if ($CompanyName -notin $CachedScreenshots.Keys) {
+		$CachedScreenshots.$CompanyName = @{}	
+	}
+	$CachedScreenshots.$CompanyName.$ServerName = $ScreenshotData
+
+	$CachedScreenshots | ConvertTo-Json | Out-File "datto_backup_cached_screenshots.json"
+}
+
+function Get-CachedScreenshotData($CompanyName, $ServerName) {
+	if (Test-Path -Path "datto_backup_cached_screenshots.json" -PathType Leaf) {
+		$CachedScreenshots = Parse-JsonFileAsHash "datto_backup_cached_screenshots.json"
+	}
+
+	if ($CachedScreenshots -and $CompanyName -in $CachedScreenshots.Keys -and $ServerName -in $CachedScreenshots.$CompanyName.Keys) {
+		$CachedScreenshot = $CachedScreenshots.$CompanyName.$ServerName
+		$CacheAge = NEW-TIMESPAN -Start (Get-Date $CachedScreenshot.Timestamp) -End (Get-Date)
+		if ($CacheAge -gt 7) {
+			return $false
+		} else {
+			return $CachedScreenshot
+		}
+	} else {
+		return $false
+	}
+}
+
 $TableHeader = "<table class=`"table table-bordered table-hover`" style=`"width:100%`">"
 $Whitespace = "<br/>"
 $TableStyling = "<th>", "<th class='bg-info'>"
@@ -623,6 +666,26 @@ foreach ($BDRDevice in $BDRDevices.items) {
 	$OffsiteStorageUsed = Convert-Size -From $BDRDevice.offsiteStorageUsed.units -To 'Auto' -Value $BDRDevice.offsiteStorageUsed.size -Precision 2 -ToString
 
 	$BDRDeviceServers = Get-DattoAsset -serialNumber $BDRDevice.serialNumber
+	$BDRDeviceServers.items | ForEach-Object { 
+		if ($_.lastScreenshotUrl) {
+			Set-CachedScreenshotData $BDRDevice.clientCompanyName $_.name @{
+				lastScreenshotAttempt = $_.lastScreenshotAttempt
+				lastScreenshotAttemptStatus = $_.lastScreenshotAttemptStatus
+				lastScreenshotUrl = $_.lastScreenshotUrl
+			}
+		}
+	}
+	$BDRDeviceServers.items | ForEach-Object {
+		if (!$_.lastScreenshotUrl) {
+			$CachedScreenshot = Get-CachedScreenshotData $BDRDevice.clientCompanyName $_.name
+			if ($CachedScreenshot) {
+				$_.lastScreenshotAttempt = $CachedScreenshot.lastScreenshotAttempt
+				$_.lastScreenshotAttemptStatus = $CachedScreenshot.lastScreenshotAttemptStatus
+				$_.lastScreenshotUrl = $CachedScreenshot.lastScreenshotUrl
+			}
+		}
+	}
+
 	$LatestBackups = $BDRDeviceServers.items | Where-Object { !$_.isArchived -and !$_.isPaused } | Foreach-Object { $_.backups[0] }
 	$FailedBackups = ($LatestBackups | Where-Object { $_.backup.status -ne 'success' } | Measure-Object).Count
 	$BadVerificationBackups = ($LatestBackups | Where-Object { $_.backup.status -eq 'success' -and $_.localVerification.status -ne 'success' } | Measure-Object).Count
