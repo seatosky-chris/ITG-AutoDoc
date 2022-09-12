@@ -440,6 +440,11 @@ foreach ($ExistingAsset in $ExistingClusterFlexAsset) {
 		$VirtFlexAssetBody.attributes.traits.'at-a-glance' = ($VirtATaGlanceHTML | Out-String);
 	}
 
+    # Filter out empty values
+	($VirtFlexAssetBody.attributes.traits.GetEnumerator() | Where-Object { -not $_.Value }) | Foreach-Object { 
+		$VirtFlexAssetBody.attributes.traits.Remove($_.Name) 
+	}
+
 	write-host "  Updating Virtualization page: $($ExistingAsset.attributes.traits.'virtualization-friendly-name')"  -ForegroundColor Green
     Set-ITGlueFlexibleAssets -id $ExistingAsset.id -data $VirtFlexAssetBody
 }
