@@ -3,7 +3,7 @@ $APIKEy =  "<ITG API KEY>"
 $APIEndpoint = "<ITG API URL>"
 $orgID = "<ITG ORG ID>"
 $LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
-$ITGlue_Base_URI = "https://sts.itglue.com"
+$ITGlue_Web_URI = "https://sts.itglue.com"
 $LicensingFlexAssetName = "Licensing"
 $OverviewFlexAssetName = "Custom Overview"
 $LicenseNames = @("Autodesk *", "AutoCAD") # Enter the names of the type(s) of licenses you want to include in the overview. This matches with the Name field in the license asset. Accepts wildcards. E.g. @("Acrobat *")
@@ -178,7 +178,7 @@ foreach ($ExistingLicense in $ExistingLicenses) {
 	# Create the overview hashtable
 	$Overview = [PSCustomObject]@{
 		'Sort' = $ExistingLicense.attributes.name
-		'License' = "<a href='$($ITGlue_Base_URI)/$($orgID)/assets/records/$($ExistingLicense.id)'>$($ExistingLicense.attributes.traits.name) $($ExistingLicense.attributes.traits.version)</a>"
+		'License' = "<a href='$($ITGlue_Web_URI)/$($orgID)/assets/records/$($ExistingLicense.id)'>$($ExistingLicense.attributes.traits.name) $($ExistingLicense.attributes.traits.version)</a>"
 		'Renewal Date' = ""
 		'Seats Available' = $TotalSeats
 		'Seats Used' = $TotalUsed

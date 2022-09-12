@@ -2,7 +2,7 @@
 $APIKEy =  "<ITG API KEY>"
 $APIEndpoint = "<ITG API URL>"
 $orgID = "<ITG Org ID>"
-$ITGlue_Base_URI = "https://sts.itglue.com"
+$ITGlue_Web_URI = "https://sts.itglue.com"
 $LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
 $FlexAssetName = "Licensing"
 $ForceUpdate = $false # Forces every bluebeam license to be updated even if the primary fields won't change (good for a first run)
@@ -327,7 +327,7 @@ foreach ($ExistingLicense in $ExistingLicenses) {
 
 	# Create the overview hashtable
 	$Overview = [PSCustomObject]@{
-		'License' = "<a href='$($ITGlue_Base_URI)/$($orgID)/assets/records/$($ExistingLicense.id)'>Revu $($LicenseInfo.Version)</a>"
+		'License' = "<a href='$($ITGlue_Web_URI)/$($orgID)/assets/records/$($ExistingLicense.id)'>Revu $($LicenseInfo.Version)</a>"
 		'Purchased By' = ""
 		'Renewal Date' = ""
 		'Seats Available' = $LicenseInfo."Users Allowed"
