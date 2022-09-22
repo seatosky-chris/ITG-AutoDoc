@@ -277,7 +277,7 @@ $ForestFunctionalLevel = $RawAD.RootDSE.forestFunctionality
 $DomainFunctionalLevel = $RawAD.RootDSE.domainFunctionality
 $domaincontrollerMaxLevel = $RawAD.RootDSE.domainControllerFunctionality
   
-$passwordpolicyraw = Get-ADDefaultDomainPasswordPolicy | Select-Object ComplexityEnabled, PasswordHistoryCount, LockoutDuration, LockoutThreshold, MaxPasswordAge, MinPasswordAge 
+$passwordpolicyraw = Get-ADDefaultDomainPasswordPolicy | Select-Object ComplexityEnabled, MinPasswordLength, PasswordHistoryCount, LockoutDuration, LockoutThreshold, MaxPasswordAge, MinPasswordAge 
 $passwordpolicyhtml = $passwordpolicyraw | convertto-html -Fragment -As List | Select-Object -skip 1
 $passwordpolicyheader = "<tr><th><b>Policy</b></th><th><b>Setting</b></th></tr>"
 $passwordpolicyNice = $TableHeader + ($passwordpolicyheader -replace $TableStyling) + ($passwordpolicyhtml -replace $TableStyling) + $Whitespace
