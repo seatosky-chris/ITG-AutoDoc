@@ -149,6 +149,7 @@ foreach ($SMBShare in $AllSmbShares) {
 	# Also save a permissions json file to the file share for the AD Server portion to use for updating
 	$PermsJson = ($Permissions | ConvertTo-EnumsAsStrings -Depth 10 | ConvertTo-Json -Depth 10)
 	$PermsJson | Out-File -FilePath ($DiskPath + "/PermissionsBackup_$PermissionsFileUUID.json")
+	(get-item ($DiskPath + "/PermissionsBackup_$PermissionsFileUUID.json")).Attributes += 'Hidden'
 	
 	# Get existing asset to update (if one exists)
 	$ExistingShare = $ExistingShares | Where-Object { $_.attributes.traits."disk-path-on-server" -eq $DiskPath -and $_.attributes.traits.servers.values.id -contains $Servers[0] -and $_.attributes.traits."share-type" -eq "Windows File Share" } | Select-Object -First 1
