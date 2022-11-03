@@ -25,6 +25,20 @@ if ($CurrentTLS -notlike "*Tls12" -and $CurrentTLS -notlike "*Tls13") {
 	Write-Host "This device is using an old version of TLS. Temporarily changed to use TLS v1.2."
 }
 
+# Powershell does not like the bluebeam.com SSL cert, this ignores the warnings
+add-type @"
+    using System.Net;
+    using System.Security.Cryptography.X509Certificates;
+    public class TrustAllCertsPolicy : ICertificatePolicy {
+        public bool CheckValidationResult(
+            ServicePoint srvPoint, X509Certificate certificate,
+            WebRequest request, int certificateProblem) {
+            return true;
+        }
+    }
+"@
+[System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy
+
 # Grabbing ITGlue Module and installing.
 If (Get-Module -ListAvailable -Name "ITGlueAPI") { 
     Import-module ITGlueAPI 
@@ -55,12 +69,12 @@ $FullConfigurationsList = (Get-ITGlueConfigurations -page_size 1000 -organizatio
 $Locations = (Get-ITGlueLocations -org_id $OrgID).data
 
 # Get the nonce in the global script to create the web session, then create a function to reset the nonce using the existing web session
-$WebResponse = Invoke-WebRequest "https://www.bluebeam.com/reglookup" -SessionVariable 'WebSession'
+$WebResponse = Invoke-WebRequest "https://www.reglookup.bluebeam.com/reglookup" -SessionVariable 'WebSession'
 $Nonce = ($WebResponse.InputFields |Where-Object {$_.name -eq "form-nonce"}).value
 
 function GetFormNonce($WebSession) {
 # Get the form nonce (we need this to submit the form)
-	$WebResponse = Invoke-WebRequest "https://www.bluebeam.com/reglookup" -WebSession $WebSession
+	$WebResponse = Invoke-WebRequest "https://www.reglookup.bluebeam.com/reglookup" -WebSession $WebSession
 	$Nonce = ($WebResponse.InputFields | Where-Object {$_.name -eq "form-nonce"}).value
 	$Nonce
 	return
@@ -205,7 +219,7 @@ foreach ($ExistingLicense in $ExistingLicenses) {
 
 	$OtherEmails | ForEach-Object { if ($_ -notin $AlternateEmails -and $_ -ne $Email) { $AlternateEmails.Add($_) | Out-Null }  }
 
-	# Send a post request to https://www.bluebeam.com/reglookup
+	# Send a post request to https://www.reglookup.bluebeam.com/reglookup
 	$FormBody = @{
 		"__form-name__" = 'reglookupForm'
 		"data[serialNumber]" = $SerialKey
@@ -218,7 +232,7 @@ foreach ($ExistingLicense in $ExistingLicenses) {
 	$attempt = 5
 	while ($attempt -gt 0 -and -not $SuccessfullQuery) {
 		try {
-			$Response = Invoke-WebRequest 'https://www.bluebeam.com/reglookup' -WebSession $WebSession -Body $FormBody -Method 'POST'
+			$Response = Invoke-WebRequest 'https://www.reglookup.bluebeam.com/reglookup' -WebSession $WebSession -Body $FormBody -Method 'POST'
 			if ($Response.Content -like "*Oops there was a problem, please check your input and submit the form again.*" -or $Response.Content -like "*License Key Lookup*" -or $Response.Content -like "*Validation failed:*" -or $Response.Content -like "*License information not found. Please check your information*") {
 				$attempt--
 				# Form input was wrong, either the wrong email or a bad nonce
