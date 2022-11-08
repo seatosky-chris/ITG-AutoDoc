@@ -63,7 +63,15 @@ $LicenseCount = ($ExistingLicenses | Measure-Object).Count
 
 # Get full configurations list from ITG (it's faster than searching for computers on a per api call basis)
 Write-Host "Downloading all ITG configurations"
-$FullConfigurationsList = (Get-ITGlueConfigurations -page_size 1000 -organization_id $OrgID).data
+$FullConfigurationsList = Get-ITGlueConfigurations -page_size "1000" -organization_id $OrgID
+$i = 1
+while ($FullConfigurationsList.links.next) {
+	$i++
+	$Configurations_Next = Get-ITGlueConfigurations -page_size "1000" -page_number $i -organization_id $OrgID
+	$FullConfigurationsList.data += $Configurations_Next.data
+	$FullConfigurationsList.links = $Configurations_Next.links
+}
+$FullConfigurationsList = $FullConfigurationsList.data
 
 # Get the locations (for the license overview)
 $Locations = (Get-ITGlueLocations -org_id $OrgID).data

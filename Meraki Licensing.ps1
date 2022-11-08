@@ -349,7 +349,16 @@ foreach ($OrgLicensing in $LicenseInfo) {
 	if (($OrgLicensing.devices | Measure-Object).Count -gt 0) {
 		if (($OrgDevices | Where-Object { $_.itgId -eq $Organization.itgId } | Measure-Object).Count -eq 0) {
 			Write-Output "Downloading all ITG configurations for: $($Organization.itgName)"
-			$FullConfigurationsList = (Get-ITGlueConfigurations -page_size 1000 -organization_id $Organization.itgId).data
+			$FullConfigurationsList = Get-ITGlueConfigurations -page_size "1000" -organization_id $Organization.itgId
+			$i = 1
+			while ($FullConfigurationsList.links.next) {
+				$i++
+				$Configurations_Next = Get-ITGlueConfigurations -page_size "1000" -page_number $i -organization_id $Organization.itgId
+				$FullConfigurationsList.data += $Configurations_Next.data
+				$FullConfigurationsList.links = $Configurations_Next.links
+			}
+			$FullConfigurationsList = $FullConfigurationsList.data
+
 			$OrgDevices += @{
 				itgId = $Organization.itgId
 				devices = $FullConfigurationsList
