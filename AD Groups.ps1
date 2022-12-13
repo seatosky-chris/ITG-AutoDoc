@@ -69,7 +69,15 @@ $ExistingGroupIdentifiers = $ExistingGroups.attributes.traits | Select-Object "g
 
 # Get full contact list from ITG (it's faster than searching for members on a per contact basis)
 Write-Host "Downloading all ITG contacts"
-$FullContactList = (Get-ITGlueContacts -page_size 1000 -organization_id $OrgID).data
+$FullContactList = @()
+$i = 1
+while ($i -le 10 -and ($FullContactList | Measure-Object).Count -eq (($i-1) * 500)) {
+	$FullContactList += (Get-ITGlueContacts -page_size 500 -page_number $i -organization_id $OrgID).data
+	Write-Host "- Got contact set $i"
+	$TotalContacts = ($FullContactList | Measure-Object).Count
+	Write-Host "- Total: $TotalContacts"
+	$i++
+}
 
 # Get dictionary for application checks
 $Dictionary = @{}

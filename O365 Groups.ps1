@@ -98,7 +98,15 @@ $ExistingGroupIdentifiers = @($ExistingGroups.attributes.traits | Select-Object 
 
 # Get full contact list from ITG
 Write-Host "Downloading all ITG contacts"
-$FullContactList = (Get-ITGlueContacts -page_size 1000 -organization_id $OrgID).data
+$FullContactList = @()
+$i = 1
+while ($i -le 10 -and ($FullContactList | Measure-Object).Count -eq (($i-1) * 500)) {
+	$FullContactList += (Get-ITGlueContacts -page_size 500 -page_number $i -organization_id $OrgID).data
+	Write-Host "- Got contact set $i"
+	$TotalContacts = ($FullContactList | Measure-Object).Count
+	Write-Host "- Total: $TotalContacts"
+	$i++
+}
 
 # Get AD groups
 if ($ADGroupsFilterID) {
