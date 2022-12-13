@@ -185,6 +185,7 @@ function Get-WarrantyAutotaskCustom {
         }
         $WarState
     }
+	Write-Progress -Activity "Grabbing Warranty information" -status "Ready" -Completed
     Remove-item 'devices.json' -Force -ErrorAction SilentlyContinue
     return $warrantyObject
 }
