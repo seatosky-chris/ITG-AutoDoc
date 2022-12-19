@@ -35,8 +35,7 @@ if ($CurrentTLS -notlike "*Tls12" -and $CurrentTLS -notlike "*Tls13") {
 #Grabbing ITGlue Module and installing.
 If (Get-Module -ListAvailable -Name "ITGlueAPI") { 
     Import-module ITGlueAPI 
-}
-Else { 
+} Else { 
     Install-Module ITGlueAPI -Force
     Import-Module ITGlueAPI
 }
@@ -464,8 +463,8 @@ if (!$ExistingFlexAsset) {
                 'ad-level'					= $DomainLevel
                 'ad-servers'                = @($DCAssets.ID)
                 'primary-domain-controller' = @($PrimaryDCAssets.ID)
-                'dns-servers'               = @($DNSServers.ID | Get-Unique)
-                'dhcp-servers'              = @($DHCPServers.ID | Get-Unique)
+                'dns-servers'               = @($DNSServers.ID | Sort-Object -Unique)
+                'dhcp-servers'              = @($DHCPServers.ID | Sort-Object -Unique)
 				'forest-summary'            = $ForestNice
 				'site-summary'              = $SiteNice
 				'domain-controllers'        = $DCNice
@@ -495,8 +494,8 @@ else {
                 'ad-level'					= $DomainLevel
                 'ad-servers'                = @($DCAssets.ID)
                 'primary-domain-controller' = @($PrimaryDCAssets.ID)
-                'dns-servers'               = @($DNSServers.ID | Get-Unique)
-                'dhcp-servers'              = @($DHCPServers.ID | Get-Unique)
+                'dns-servers'               = @($DNSServers.ID | Sort-Object -Unique)
+                'dhcp-servers'              = @($DHCPServers.ID | Sort-Object -Unique)
 				'forest-summary'            = $ForestNice
 				'site-summary'              = $SiteNice
 				'domain-controllers'        = $DCNice
