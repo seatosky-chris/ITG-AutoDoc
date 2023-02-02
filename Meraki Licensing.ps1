@@ -5,6 +5,16 @@ $LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
 $MerakiAPIKey = "<MERAKI API KEY>"
 $ITGlue_Base_URI = "https://sts.itglue.com"
 $FlexAssetName = "Licensing"
+
+$ConfigurationTypes = @{ # This maps Meraki product types to ITG configuration types (by ITG type ID)
+	"wireless" = 1
+	"switch" = 2
+	"firewall" = 3
+	"appliance" = 4
+}
+$ConfigurationStatusID = 10 # The ITG Active status ID
+$MerakiManufacturerID = 20 # The ITG manufacturer ID for Meraki
+$Orgs_PreventConfigCreation = @("") # The meraki name or ID of any organizations you don't want to automatically add ITG configs for
 #####################################################################
 
 # Ensure they are using the latest TLS version
@@ -335,6 +345,7 @@ foreach ($Org in $OrgMatches) {
 
 $OrgDevices = @()
 $OrgExistingLicenses = @()
+$ITGMerakiModels = $false
 foreach ($OrgLicensing in $LicenseInfo) {
 	$UpdatedLicenses = 0
 	# Skip empty licenses
@@ -358,7 +369,7 @@ foreach ($OrgLicensing in $LicenseInfo) {
 				$FullConfigurationsList.links = $Configurations_Next.links
 			}
 			$FullConfigurationsList = $FullConfigurationsList.data
-
+			
 			$OrgDevices += @{
 				itgId = $Organization.itgId
 				devices = $FullConfigurationsList
@@ -472,6 +483,79 @@ foreach ($OrgLicensing in $LicenseInfo) {
 
 		$AllDevices = $OrgDevices | Where-Object { $_.itgId -eq $Organization.itgId }
 		$AssignedDevices = $AllDevices.devices | Where-Object { $_.attributes.name -in $OrgLicensing.devices.name }
+
+		if ($Organization.merakiName -notin $Orgs_PreventConfigCreation -and $Organization.merakiId -notin $Orgs_PreventConfigCreation) {
+			$MissingDevices = $OrgLicensing.devices.name | Where-Object {!($AssignedDevices.attributes.name -contains $_)}
+
+			if ($MissingDevices -and !$ITGMerakiModels) {
+				$ITGMerakiModels = (Get-ITGlueModels -manufacturer_id $MerakiManufacturerID -page_size 1000).data
+			}
+
+			foreach ($MissingDeviceName in $MissingDevices) {
+				$DeviceDetails = $OrgLicensing.devices | Where-Object { $_.name -eq $MissingDeviceName }
+				$ConfigType = $false
+
+				if (!$DeviceDetails.name) {
+					continue
+				}
+
+				if ($DeviceDetails.productType -notin $ConfigurationTypes.keys) {
+					continue
+				} else {
+					if ($DeviceDetails.productType -eq "appliance" -and ($DeviceDetails.name -like "*FW*" -or $DeviceDetails.name -like "*Firewall*")) {
+						$DeviceDetails.productType = "firewall"
+					}
+					$ConfigType = $ConfigurationTypes[$DeviceDetails.productType]
+					if (!$ConfigType) { continue }
+				}
+
+				$Model = $ITGMerakiModels | Where-Object { $_.attributes.name -like $DeviceDetails.model }
+				if (!$Model) {
+					$NewModelData = @{
+						type = "models"
+						attributes = @{
+							name = $DeviceDetails.model
+							"manufacturer-id" = $MerakiManufacturerID
+						}
+					}
+					$Model = New-ITGlueModels -manufacturer_id $MerakiManufacturerID -data $NewModelData
+
+					if ($Model -and $Model.data) {
+						$Model = $Model.data[0]
+						$ITGMerakiModels += $Model
+					} else {
+						continue
+					}
+
+				}
+
+				$NewConfigData = 
+				@{
+					type = 'configurations'
+					attributes = @{
+						'name' = $DeviceDetails.name
+						'serial-number' = $DeviceDetails.serial
+						'mac-address' = $DeviceDetails.mac
+						'primary-ip' = if ($DeviceDetails.lanIp) { $DeviceDetails.lanIp } elseif ($DeviceDetails.wan1Ip) { $DeviceDetails.wan1Ip } else { "" }
+						'default-gateway' = if ($DeviceDetails.gateway) { $DeviceDetails.gateway } elseif ($DeviceDetails.wan1Gateway) { $DeviceDetails.wan1Gateway } else { "" }
+
+						'configuration-type-id' = $ConfigType
+						'configuration-status-id' = $ConfigurationStatusID
+						'manufacturer-id' = $MerakiManufacturerID
+						'model-id' = $Model.id
+					}
+				}
+
+				$NewConfig = New-ITGlueConfigurations -organization_id $Organization.itgId -data $NewConfigData
+				if ($NewConfig -and $NewConfig.data) {
+					$NewConfig = $NewConfig.data[0]
+					($OrgDevices | Where-Object { $_.itgId -eq $Organization.itgID }).devices += $NewConfig
+					$AssignedDevices += $NewConfig
+					Write-Host "Added new ITG config: $($NewConfig.attributes.name)"
+				}
+			}
+		}
+
 
 		$RenewalDate = [datetime]::ParseExact($OrgLicensing.expirationDate.Replace(" UTC", ""), 'MMM d, yyyy', $null).ToString("yyyy-MM-dd")
 		$DeviceCounts = @()
