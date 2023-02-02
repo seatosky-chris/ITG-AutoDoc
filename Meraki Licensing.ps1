@@ -312,7 +312,7 @@ foreach ($Org in $OrgMatches) {
 	if ($LicenseState -like "HTTP Error*") {
 		Write-Warning "An error occurred connecting to Meraki org: $($Org.merakiName)."
 		Write-Warning "Please ensure the API is enabled for this company."
-		Write-Output $Licenses
+		Write-Output $LicenseState
 	} else {
 		$Licenses = Get-MrkLicenses -orgId $Org.merakiId
 		$Devices = Get-MrkDevicesStatus -orgId $Org.merakiId
@@ -389,9 +389,16 @@ foreach ($OrgLicensing in $LicenseInfo) {
 
 			$AllDevices = $OrgDevices | Where-Object { $_.itgId -eq $Organization.itgId }
 			$OrgDevice = $AllDevices.devices | Where-Object { $_.attributes.'serial-number' -eq $License.deviceSerial -or $_.attributes.name -like $MerakiDevice.name }
+			$DeviceName = if ($OrgDevice) { $OrgDevice[0].attributes.name } else { $MerakiDevice.name }
 
-			$ClaimDate = ([DateTime]$License.claimDate).ToString("yyyy-MM-dd")
-			$RenewalDate = ([DateTime]$License.expirationDate).ToString("yyyy-MM-dd")
+			$ClaimDate = $null;
+			$RenewalDate = $null;
+			if ($License.claimDate -and ([string]$License.claimDate -as [DateTime])) {
+				$ClaimDate = ([DateTime]$License.claimDate).ToString("yyyy-MM-dd")
+			}
+			if ($License.expirationDate -and ([string]$License.expirationDate -as [DateTime])) {
+				$RenewalDate = ([DateTime]$License.expirationDate).ToString("yyyy-MM-dd")
+			}
 
 			$AdditionalNotes = "================== <br>"
 			$AdditionalNotes += "Do NOT edit <br>"
@@ -446,14 +453,14 @@ foreach ($OrgLicensing in $LicenseInfo) {
 							$FlexAssetBody.attributes.traits.'ticket-number-for-original-purchase' = $ExistingLicense.attributes.traits.'ticket-number-for-original-purchase'
 						}
 	
-						Write-Host "Updating Per-Device License for: $($Organization.itgName) - $($OrgDevice[0].attributes.name)"
+						Write-Host "Updating Per-Device License for: $($Organization.itgName) - $($DeviceName)"
 						Set-ITGlueFlexibleAssets -id $ExistingLicense.id  -data $FlexAssetBody
 					} else {
-						Write-Host "Update not required for Per-Device License for: $($Organization.itgName) - $($OrgDevice[0].attributes.name)"
+						Write-Host "Update not required for Per-Device License for: $($Organization.itgName) - $($DeviceName)"
 					}
 			} else {
 				# New license asset
-				Write-Host "Creating new per-device license asset for: $($Organization.itgName) - $($OrgDevice[0].attributes.name)"
+				Write-Host "Creating new per-device license asset for: $($Organization.itgName) - $($DeviceName)"
 				New-ITGlueFlexibleAssets -data $FlexAssetBody
 			}
 			$UpdatedLicenses++
