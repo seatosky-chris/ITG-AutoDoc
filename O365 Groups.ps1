@@ -16,7 +16,7 @@ $O365UnattendedLogin = @{
 	TenantID = ""
 	Organization = ""
 	CertificateThumbprint = ""
-  }
+}
 #################### /O365 Unattended Login using Certs ####################
 
 # Ensure they are using the latest TLS version
@@ -473,15 +473,19 @@ function UpdateGroupAsset {
 		$CreatedOn = $Group.WhenCreated
 	} elseif ($GroupType -eq 'Shared Mailbox') {
 		if ($Group.DeliverToMailboxAndForward) {
-			$ConfigurationDetails += "Email forwarding enabled.`n"
-			$ConfigurationDetails += "Forwarding to: " + $Group.ForwardingAddress
-			$ConfigurationDetails += "`n"
+			$ConfigurationDetails += "Email forwarding enabled.<br/>`n<br/>`n"
+			if ($Group.ForwardingAddress) {
+				$ConfigurationDetails += "Forwarding to: " + $Group.ForwardingAddress
+			} else {
+				$ConfigurationDetails += "Forwarding to: " + ($Group.ForwardingSmtpAddress -replace "^smtp:", "")
+			}
+			$ConfigurationDetails += "<br/>`n"
 		}
 		if ($Group.MessageCopyForSentAsEnabled) {
-			$ConfigurationDetails += '✓ Copy items sent as this mailbox.' + "`n"
+			$ConfigurationDetails += "~ Copy items sent as this mailbox.<br/>`n"
 		}
 		if ($Group.MessageCopyForSendOnBehalfEnabled) {
-			$ConfigurationDetails += '✓ Copy items sent on behalf of this mailbox.' + "`n"
+			$ConfigurationDetails += "~ Copy items sent on behalf of this mailbox.<br/>`n"
 		}
 		$CreatedOn = $Group.WhenCreated
 	}
