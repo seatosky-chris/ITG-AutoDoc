@@ -38,6 +38,11 @@ This script will create and update a Licensing asset for that companies Meraki e
 
 If you are running this from the Task Scheduler, be sure to set the Action's "Start In" value to the location that the script is running from. This is required for relative path references for the forms and json matching file.
 
+### Sophos Firewall Licensing
+This script will create and update Firewall assets for Sophos Firewalls in the Sophos portal. This does not need to be setup on a customer server and can be ran from anywhere. This can be setup with a global ITG api key and global Sophos API key and be ran for all customers in one go. It will run through each Sophos organization and try to match them to an ITG organization, if it cannot, you will be prompted to make a match manually. It will then get the firewall info from Sophos, update/create the firewall asset in ITG, and tag the ITG configuration if it exists (on new firewall creations it will create the configuration).
+
+If you are running this from the Task Scheduler, be sure to set the Action's "Start In" value to the location that the script is running from. This is required for relative path references for the forms and json matching file.
+
 ### O365 Groups
 This script will document Email Groups in O365. It will add/update Microsoft 365 Groups, Distribution Lists, Mail-enabled Security groups, regular Security groups, and Shared Mailboxes. It requires unattended access to O365 with an SSL certificate, the same setup the User Audit script has. If they have a large amount of Email Groups it can take a long time to run. To set it up you must fill in the IT Glue API key, endpoint url, and the customers ITG organization ID. Additionally, the O365 unattended login details are required. For each email group it will create a new asset. It will categorize the group and it will tag all owners and members. The script will take care of adding all new groups as well as keeping them updated. It will try to add all of the data it can but if necessary, you can manually edit things like the group description, configuration details, who to add (only manual), approver for access, etc. For the sync to work, the ObjectID must be correct in the ITG asset. If you do not want it to add new groups, you can change `$UpdateOnly` to `$true`.
 
