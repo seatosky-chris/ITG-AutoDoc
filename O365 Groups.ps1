@@ -261,6 +261,8 @@ foreach ($Group in $SecurityGroups) {
 	}
 }
 
+$SharedMailboxes = $SharedMailboxes | Where-Object { $_.Name -notlike "*- Disabled" -and $_.Name -notlike "*-Disabled" }
+$SharedMailboxes = $SharedMailboxes | Where-Object { $_.DisplayName -notlike "*- Disabled" -and $_.DisplayName -notlike "*-Disabled" }
 $SharedMailboxPermissions = $SharedMailboxes | Get-MailboxPermission | Where-Object {($_.user -like '*@*')}
 $SharedMailboxSendAs = $SharedMailboxes | Get-RecipientPermission | Where-Object {($_.Trustee -like '*@*')}
 foreach ($Mailbox in $SharedMailboxes) {
