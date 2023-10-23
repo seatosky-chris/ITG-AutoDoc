@@ -1,9 +1,9 @@
 #####################################################################
 $APIKEy =  "<ITG API KEY>"
-$APIEndpoint = "<ITG API URL>"
 $orgID = "<ITG Org ID>"
-$ITGlue_Web_URI = "https://sts.itglue.com"
+$APIEndpoint = "<ITG API URL>"
 $LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
+$ITGlue_Web_URI = "https://sts.itglue.com"
 $FlexAssetName = "Licensing"
 $ForceUpdate = $false # Forces every bluebeam license to be updated even if the primary fields won't change (good for a first run)
 $PrimaryEmail = "" # The primary email bluebeam is generally licensed under

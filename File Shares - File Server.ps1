@@ -1,7 +1,7 @@
 #####################################################################
 $APIKEy =  "<ITG API KEY>"
+$orgID = "<ITG Org ID>"
 $APIEndpoint = "<ITG API URL>"
-$orgID = "<ITG ORG ID>"
 $LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
 $UpdateOnly = $false # If set to $true, the script will only update existing assets. If $false, it will add new file shares (that have members) and add them to ITG with as much info as possible.
 $FlexAssetName = "File Shares / Storage"
@@ -16,7 +16,7 @@ $IgnoreSharePaths = @(
 ) 
 $RecursiveDepth = 3 # How deep in the file structure to look for permissions
 $IgnoreLocalGroups = $true # If true, it will ignore permissions of local groups/accounts and only look up domain groups & accounts
-$PermissionsFileUUID = "aacb925d-3c22-4b35-8b2e-9da010fa2dea"
+$PermissionsFileUUID = "XXXX"
 ####################################################################
 
 # Ensure they are using the latest TLS version

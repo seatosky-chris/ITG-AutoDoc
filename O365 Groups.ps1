@@ -1,7 +1,7 @@
 ################# IT-Glue Information ######################################
-$ITGApiKey = "<ITG API KEY>"
-$ITGApiEndpoint = "<ITG API URL>"
-$OrgID = "<ITG Org ID>"
+$APIKEy =  "<ITG API KEY>"
+$orgID = "<ITG Org ID>"
+$APIEndpoint = "<ITG API URL>"
 $LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
 $UpdateOnly = $false # If set to $true, the script will only update existing assets. If $false, it will add new groups and add them to ITG with as much info as possible.
 $FlexAssetName = "Email Groups"
@@ -10,12 +10,12 @@ $Description = "Auto documentation of all O365 distribution lists and shared mai
 ################# /IT-Glue Information #####################################
 
 #################### O365 Unattended Login using Certs #####################
-$O365LoginUser = ""
+$O365LoginUser = "<O365 Login User>"
 $O365UnattendedLogin = @{
-	AppID = ""
-	TenantID = ""
-	Organization = ""
-	CertificateThumbprint = ""
+	AppID = "<O365 Login AppID>"
+	TenantID = "<O365 Login TenantID>"
+	Organization = "<O365 Login Org>"
+	CertificateThumbprint = "<O365 Login Cert Thumprint>"
 }
 #################### /O365 Unattended Login using Certs ####################
 
@@ -35,8 +35,8 @@ If (Get-Module -ListAvailable -Name "ITGlueAPI") {
 }
   
 #Settings IT-Glue logon information
-Add-ITGlueBaseURI -base_uri $ITGApiEndpoint
-Add-ITGlueAPIKey $ITGApiKey
+Add-ITGlueBaseURI -base_uri $APIEndpoint
+Add-ITGlueAPIKey $APIKEy
 
 # Connect to Office 365 and Azure
 Write-Host "Connecting to Office 365..."
@@ -70,7 +70,7 @@ if ($ADGroupsFlexAssetName) {
 }
 
 # If a matched user list csv (from the user audit) exists, get that and user it later for matching ITG contacts to AD usernames
-$OrganizationInfo = (Get-ITGlueOrganizations -id $OrgID).data
+$OrganizationInfo = (Get-ITGlueOrganizations -id $orgID).data
 $OrgShortName = $OrganizationInfo[0].attributes."short-name"
 $MatchedUserList = Import-CSV "C:\seatosky\$($OrgShortName)_Matched_User_List.csv"
 
@@ -81,7 +81,7 @@ Write-Host "Downloading existing email groups"
 $ExistingGroups = @()
 $i = 1
 while ($i -le 10 -and ($ExistingGroups | Measure-Object).Count -eq (($i-1) * 200)) {
-	$ExistingGroups += (Get-ITGlueFlexibleAssets -page_size 200 -page_number $i -filter_flexible_asset_type_id $Filterid.id -filter_organization_id $OrgID).data
+	$ExistingGroups += (Get-ITGlueFlexibleAssets -page_size 200 -page_number $i -filter_flexible_asset_type_id $Filterid.id -filter_organization_id $orgID).data
 	Write-Host "- Got group set $i"
 	$TotalGroups = ($ExistingGroups | Measure-Object).Count
 	Write-Host "- Total: $TotalGroups"
@@ -101,7 +101,7 @@ Write-Host "Downloading all ITG contacts"
 $FullContactList = @()
 $i = 1
 while ($i -le 10 -and ($FullContactList | Measure-Object).Count -eq (($i-1) * 500)) {
-	$FullContactList += (Get-ITGlueContacts -page_size 500 -page_number $i -organization_id $OrgID).data
+	$FullContactList += (Get-ITGlueContacts -page_size 500 -page_number $i -organization_id $orgID).data
 	Write-Host "- Got contact set $i"
 	$TotalContacts = ($FullContactList | Measure-Object).Count
 	Write-Host "- Total: $TotalContacts"
@@ -513,7 +513,7 @@ function UpdateGroupAsset {
 		@{
 			type = 'flexible-assets'
 			attributes = @{
-				'organization-id' = $OrgID
+				'organization-id' = $orgID
 				'flexible-asset-type-id' = $FilterID.id
 				traits = @{
 					"group-name" = $GroupName
@@ -674,10 +674,10 @@ Write-Progress -Activity "Updating Groups" -Status "Ready" -Completed
 # Update / Create the "Scripts - Last Run" ITG page which shows when this AutoDoc (and other scripts) last ran
 if ($LastUpdatedUpdater_APIURL -and $orgID) {
     $Headers = @{
-        "x-api-key" = $ITGApiKey
+        "x-api-key" = $APIKEy
     }
     $Body = @{
-        "apiurl" = $ITGApiEndpoint
+        "apiurl" = $APIEndpoint
         "itgOrgID" = $orgID
         "HostDevice" = $env:computername
         "o365-groups" = (Get-Date).ToString("yyyy-MM-dd")

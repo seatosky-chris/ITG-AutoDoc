@@ -1,8 +1,8 @@
 #Requires -RunAsAdministrator
 ########################## IT-Glue ############################
-$APIKEy = "<ITG API KEY>"
+$APIKEy =  "<ITG API KEY>"
+$orgID = "<ITG Org ID>"
 $APIEndpoint = "<ITG API URL>"
-$OrgID = "<ITG Org ID>"
 $LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
 $FlexAssetName = "Hyper-V Host"
 $Cluster_FlexAssetName = "Virtualization"

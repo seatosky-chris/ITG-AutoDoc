@@ -1,7 +1,7 @@
 #####################################################################
 $APIKEy =  "<ITG API KEY>"
-$APIEndpoint = "<ITG API URL>"
 $orgID = "<ITG Org ID>"
+$APIEndpoint = "<ITG API URL>"
 $LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
 $FlexAssetName = "Active Directory"
 $Description = "A network one-page document that shows the current configuration for Active Directory."

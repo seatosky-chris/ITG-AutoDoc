@@ -1,7 +1,7 @@
 #####################################################################
 $APIKEy =  "<ITG API KEY>"
-$APIEndpoint = "<ITG API URL>"
 $orgID = "<ITG Org ID>"
+$APIEndpoint = "<ITG API URL>"
 $LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
 $FlexAssetName = "Security"
 $Description = "Updates the Security Summary flexible asset. It will fill out what is possible automatically."

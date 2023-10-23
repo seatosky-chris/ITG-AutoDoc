@@ -1,7 +1,7 @@
 #####################################################################
 $APIKEy =  "<ITG API KEY>"
-$APIEndpoint = "<ITG API URL>"
 $orgID = "<ITG Org ID>"
+$APIEndpoint = "<ITG API URL>"
 $LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
 $UpdateOnly = $false # If set to $true, the script will only update existing assets. If $false, it will add new groups (that have members) and add them to ITG with as much info as possible.
 $FlexAssetName = "AD Security Groups"

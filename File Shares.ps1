@@ -1,7 +1,7 @@
 #####################################################################
 $APIKEy =  "<ITG API KEY>"
+$orgID = "<ITG Org ID>"
 $APIEndpoint = "<ITG API URL>"
-$orgID = "<ITG ORG ID>"
 $LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
 $UpdateOnly = $false # If set to $true, the script will only update existing assets. If $false, it will add new file shares (that have members) and add them to ITG with as much info as possible.
 $FlexAssetName = "File Shares / Storage"

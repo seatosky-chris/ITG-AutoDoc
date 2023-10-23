@@ -1,13 +1,13 @@
 #####################################################################
 $APIKEy =  "<ITG API KEY>"
+$orgID = "<ITG Org ID>"
 $APIEndpoint = "<ITG API URL>"
-$orgID = "<ITG ORG ID>"
 $LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
 $ITGlue_Web_URI = "https://sts.itglue.com"
 $LicensingFlexAssetName = "Licensing"
 $OverviewFlexAssetName = "Custom Overview"
-$LicenseNames = @("Autodesk *", "AutoCAD") # Enter the names of the type(s) of licenses you want to include in the overview. This matches with the Name field in the license asset. Accepts wildcards. E.g. @("Acrobat *")
-$OverviewDocumentName = "Autodesk/AutoCAD Licensing Overview" # This name should be unique (within the organization)
+$LicenseNames = @("<Software Filters>") # Enter the names of the type(s) of licenses you want to include in the overview. This matches with the Name field in the license asset. Accepts wildcards. E.g. @("Acrobat *", "Adobe *")
+$OverviewDocumentName = "<Software Name> Licensing Overview" # This name should be unique (within the organization)
 $Description = "Creates a license overview table for a specific application."
 $ImageURLs = @{
     'Free Seats' = "https://www.seatosky.com/wp-content/uploads/2022/09/seat.png"

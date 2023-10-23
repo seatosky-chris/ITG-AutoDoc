@@ -1,13 +1,13 @@
 #####################################################################
 $APIKEy =  "<ITG API KEY>"
+$orgID = "<ITG Org ID>"
 $APIEndpoint = "<ITG API URL>"
-$orgID = "<ITG ORG ID>"
 $LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
 $UpdateOnly = $false # If set to $true, the script will only update existing assets. If $false, it will add new file shares (that have members) and add them to ITG with as much info as possible.
 $FlexAssetName = "File Shares / Storage"
 $ADGroupsAssetName = "AD Security Groups"
 $Description = "Updates/creates all file shares in ITG with their associated permissions. It will tag AD security groups where possible."
-$PermissionsBackupFileJSON = "\PermissionsBackup_aacb925d-3c22-4b35-8b2e-9da010fa2dea.json"
+$PermissionsBackupFileJSON = "\PermissionsBackup_XXXX.json"
 ####################################################################
 
 # Ensure they are using the latest TLS version
