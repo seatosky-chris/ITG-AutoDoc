@@ -72,7 +72,13 @@ if ($ADGroupsFlexAssetName) {
 # If a matched user list csv (from the user audit) exists, get that and user it later for matching ITG contacts to AD usernames
 $OrganizationInfo = (Get-ITGlueOrganizations -id $orgID).data
 $OrgShortName = $OrganizationInfo[0].attributes."short-name"
-$MatchedUserList = Import-CSV "C:\seatosky\$($OrgShortName)_Matched_User_List.csv"
+if (Test-Path -Path "C:\seatosky\UserAudit\$($OrgShortName)_Matched_User_List.csv" -PathType Leaf) {
+	$MatchedUserList = Import-CSV "C:\seatosky\UserAudit\$($OrgShortName)_Matched_User_List.csv"
+} elseif (Test-Path -Path "C:\seatosky\$($OrgShortName)_Matched_User_List.csv" -PathType Leaf) {
+	$MatchedUserList = Import-CSV "C:\seatosky\$($OrgShortName)_Matched_User_List.csv"
+} else {
+	$MatchedUserList = @()
+}
 
 # Get existing groups
 Write-Host "Downloading existing email groups"
