@@ -44,6 +44,23 @@ function Get-WarrantyAutotaskCustom {
     Add-AutotaskAPIAuth -ApiIntegrationcode $AutotaskAPIKey -credentials $AutotaskCredentials
 	Add-AutotaskBaseURI -BaseURI $AutotaskBaseURI
 
+	# Verify the Autotask API key works
+	$AutotaskConnected = $true
+	try { 
+		Get-AutotaskAPIResource -Resource Companies -ID 0 -ErrorAction Stop 
+	} catch { 
+		$CleanError = ($_ -split "/n")[0]
+		if ($_ -like "*(401) Unauthorized*") {
+			$CleanError = "API Key Unauthorized. ($($CleanError))"
+		}
+		Write-Host $CleanError -ForegroundColor Red
+		$AutotaskConnected = $false
+	}
+
+	if (!$AutotaskConnected) {
+		return
+	}
+
 	$Filters = @(
 		@{
 			op = "eq"
