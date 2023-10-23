@@ -163,6 +163,41 @@ Function Get-AVStatus {
 				Catch {
 					Write-Warning "[$($computer.ToUpper())] $($_.Exception.Message)"
 					$cimParams.ComputerName = $null
+
+					if ($computer -eq $env:COMPUTERNAME) {
+						# Check if Sophos is installed via registry (it doesnt always populate the CIM namespace)
+						$SophosInstalled = (Get-ItemProperty "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Sophos Endpoint Agent").DisplayName -eq "Sophos Endpoint Agent"
+						if ($SophosInstalled) {
+							$SophosRunning = Get-Service -name "Sophos MCS Client" -ea SilentlyContinue
+							$SophosKey = (Get-ItemProperty "HKLM:\SOFTWARE\Sophos\Management\SharedState\UserInterface").latest
+							$SophosUpdate = (Get-ItemProperty "HKLM:\SOFTWARE\Sophos\Management\SharedState\UserInterface\$SophosKey\SoftwareMonitoring\software_details").updating_assessment
+
+							$ProductState = 393488
+							if ($SophosRunning.Status -eq "Running") {
+								if ($SophosUpdate -eq "good") {
+									$ProductState = 266240
+								} else {
+									$ProductState = 266256
+								}
+							} else {
+								if ($SophosUpdate -eq "good") {
+									$ProductState = 262144
+								} else {
+									$ProductState = 393488
+								}
+							}
+
+							$AV += [PSCustomObject]@{
+								Displayname = "Sophos Antivirus"
+								ProductState = $ProductState
+								Enabled = if ($SophosRunning.Status -eq "Running") { $true } else { $false }
+								UpToDate = if ($SophosUpdate -eq "good") { $true } else { $false }
+								pathToSignedProductExe = ""
+								Timestamp = Get-Date -Format "ddd, dd MMM yyyy HH:mm:ss K"
+								PSComputername = $env:COMPUTERNAME
+							}
+						}
+					}
 				}
 
 			} #foreach computer
@@ -189,15 +224,13 @@ Function Get-AVStatus {
 			$mid = $hx.Substring(3, 2)
 			if ($mid -match "00|01") {
 				$Enabled = $False
-			}
-			else {
+			} else {
 				$Enabled = $True
 			}
 			$end = $hx.Substring(5)
 			if ($end -eq "00") {
 				$UpToDate = $True
-			}
-			else {
+			} else {
 				$UpToDate = $False
 			}
 
@@ -272,6 +305,9 @@ $AntiVirus = $false
 if ($AllowAVUpdates) {
 	$cs = New-CimSession
 	$AVDetails = $cs | Get-AVStatus
+	if (!$AVDetails) {
+		$AVDetails = Get-AVStatus
+	}
 
 	if (($AVDetails | Measure-Object).Count -gt 1 -and $AVDetails.Enabled -contains $true) {
 		$AVDetails = $AVDetails | Where-Object { $_.Enabled }
@@ -316,21 +352,35 @@ if ($AllowFirewallUpdates) {
 		$FirewallModels = $FirewallConfigurations | ForEach-Object { "$($_.attributes.'manufacturer-name') $($_.attributes.'model-name')" }
 	} else {
 		$FirewallAssets = (Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $FirewallAssetID.id -filter_organization_id $orgID).data
+		if ($FirewallAssets) {
+			$FirewallAssets = $FirewallAssets | Where-Object { !$_.attributes.archived }
+		}
 		$FirewallModels = $FirewallAssets.attributes.traits.model
+	}
+	if (!$FirewallAssets) {
+		$ConfigurationTypes = (Get-ITGlueConfigurationTypes -filter_name "Firewall").data
+		$FirewallConfigurations = (Get-ITGlueConfigurations -filter_configuration_type_id $ConfigurationTypes[0].id -organization_id $orgID).data
+		$FirewallModels = $FirewallConfigurations | ForEach-Object { "$($_.attributes.'manufacturer-name') $($_.attributes.'model-name')" }
 	}
 	$FirewallModels = $FirewallModels | Where-Object { $_ -and $_.Trim() -notlike "" }
 
-	foreach ($FirewallManufacturer in $FirewallManufacturers) {
-		if ($FirewallModels -like "$FirewallManufacturer*") {
-			$Firewall = $FirewallManufacturer
-			break;
+	if ($FirewallModels) {
+		foreach ($FirewallManufacturer in $FirewallManufacturers) {
+			if ($FirewallModels -like "$FirewallManufacturer*") {
+				$Firewall = $FirewallManufacturer
+				break;
+			}
 		}
+	}
+
+	if (!$Firewall -and $ExistingFlexAsset -and $ExistingFlexAsset.attributes.traits.'firewall-platform') {
+		$Firewall = $ExistingFlexAsset.attributes.traits.'firewall-platform'
 	}
 
 	if ($FirewallAssets) {
 		$FirewallDevices = @($FirewallAssets.id)
-	} elseif ($FirewallConfigurations) {
-		$FirewallDevices = @($FirewallConfigurations.id)
+	} elseif ($ExistingFlexAsset -and $ExistingFlexAsset.attributes.traits.'firewall-devices') {
+		$FirewallDevices = @($ExistingFlexAsset.attributes.traits.'firewall-devices'.values.id)
 	}
 } elseif ($ExistingFlexAsset) {
 	$Firewall = $ExistingFlexAsset.attributes.traits.'firewall-platform'
