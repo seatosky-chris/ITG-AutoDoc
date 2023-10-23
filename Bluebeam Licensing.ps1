@@ -25,7 +25,11 @@ if ($CurrentTLS -notlike "*Tls12" -and $CurrentTLS -notlike "*Tls13") {
 	Write-Host "This device is using an old version of TLS. Temporarily changed to use TLS v1.2."
 }
 
+# Allows IE use without going through the first time run (IE is required for Invoke-WebRequest parsing)
+Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Internet Explorer\Main" -Name "DisableFirstRunCustomize" -Value 2
+
 # Powershell does not like the bluebeam.com SSL cert, this ignores the warnings
+if (-not ([System.Management.Automation.PSTypeName]'TrustAllCertsPolicy').Type) {
 add-type @"
     using System.Net;
     using System.Security.Cryptography.X509Certificates;
@@ -37,6 +41,10 @@ add-type @"
         }
     }
 "@
+
+}
+$AllProtocols = [System.Net.SecurityProtocolType]'Ssl3,Tls,Tls11,Tls12'
+[System.Net.ServicePointManager]::SecurityProtocol = $AllProtocols
 [System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy
 
 # Grabbing ITGlue Module and installing.
