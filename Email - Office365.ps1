@@ -4,7 +4,7 @@
 # Created Date: Friday, September 29th 2023, 4:58:10 pm
 # Author: Chris Jantzen
 # -----
-# Last Modified: Mon Oct 23 2023
+# Last Modified: Tue Oct 24 2023
 # Modified By: Chris Jantzen
 # -----
 # Copyright (c) 2023 Sea to Sky Network Solutions
@@ -108,15 +108,16 @@ if ($O365UnattendedLogin -and $O365UnattendedLogin.AppId) {
 	Connect-ExchangeOnline -UserPrincipalName $O365LoginUser -ShowProgress $true -ShowBanner:$false
 }
 
-If (Get-Module -ListAvailable -Name "Microsoft.Graph") {
+$GraphModules = (Get-Module -ListAvailable).Name | Where-Object { $_ -like "Microsoft.Graph*" }
+If ("Microsoft.Graph" -in $GraphModules -or ("Microsoft.Graph.Users" -in $GraphModules -and "Microsoft.Graph.Identity.SignIns" -in $GraphModules -and "Microsoft.Graph.Identity.DirectoryManagement" -in $GraphModules)) {
 	Import-Module Microsoft.Graph.Users
 	Import-Module Microsoft.Graph.Identity.SignIns
 	Import-Module Microsoft.Graph.Identity.DirectoryManagement
 } else {
-	Install-Module -Name Microsoft.Graph
-	Import-Module Microsoft.Graph.Users
-	Import-Module Microsoft.Graph.Identity.SignIns
-	Import-Module Microsoft.Graph.Identity.DirectoryManagement
+	Install-Module -Name Microsoft.Graph.Authentication
+	Install-Module -Name Microsoft.Graph.Users
+	Install-Module Microsoft.Graph.Identity.SignIns
+	Install-Module Microsoft.Graph.Identity.DirectoryManagement
 }
 if ($O365UnattendedLogin -and $O365UnattendedLogin.AppId) {
 	Connect-MgGraph -CertificateThumbprint $O365UnattendedLogin.CertificateThumbprint -ClientID $O365UnattendedLogin.AppID -TenantId $O365UnattendedLogin.TenantId -NoWelcome
@@ -208,11 +209,11 @@ if (($ExistingFlexAsset | Measure-Object).Count -gt 1) {
 }
 
 # Get all passwords for filtering
-$ITGPasswords = Get-ITGluePasswords -page_size 1000 -organization_id $Match.itgId
+$ITGPasswords = Get-ITGluePasswords -page_size 1000 -organization_id $orgID
 $i = 1
 while ($ITGPasswords.links.next) {
 	$i++
-	$Passwords_Next = Get-ITGluePasswords -page_size 1000 -page_number $i -organization_id $Match.itgId
+	$Passwords_Next = Get-ITGluePasswords -page_size 1000 -page_number $i -organization_id $orgID
 	$ITGPasswords.data += $Passwords_Next.data
 	$ITGPasswords.links = $Passwords_Next.links
 }
@@ -350,7 +351,7 @@ if ($ExistingFlexAsset -and $ExistingFlexAsset.attributes.traits.'azure-ad-conne
 }
 
 if (!$ITG_AzureADConnect_Accounts -and $ExistingFlexAsset -and $ExistingFlexAsset.attributes.traits.'azure-ad-connect-directory-sync-account') {
-	$ITG_AzureADConnect_Accounts = @($ExistingFlexAsset.attributes.traits.'azure-ad-connect-directory-sync-account'.values.id)
+	$ITG_AzureADConnect_Accounts = @($ExistingFlexAsset.attributes.traits.'azure-ad-connect-directory-sync-account'.values)
 }
 
 if ($ExistingFlexAsset -and $ExistingFlexAsset.attributes.traits.'azure-ad-connect-server' -and $AzureADConnect_Server) {
@@ -369,7 +370,7 @@ if ($AzureADConnect_Server) {
 	foreach ($Server in $AzureADConnect_Server) {
 		$ExistingServerInfo = $false 
 		if ($ExistingFlexAsset) {
-			$ExistingFlexAsset.attributes.traits.'azure-ad-connect-server'.values | Where-Object { $_.name -like $Server }
+			$ExistingServerInfo = $ExistingFlexAsset.attributes.traits.'azure-ad-connect-server'.values | Where-Object { $_.name -like $Server }
 		}
 
 		if ($ExistingServerInfo) {
@@ -387,15 +388,29 @@ $ITGDomains = (Get-ITGlueDomains -page_size 1000 -organization_id $orgId).data
 $ITG_O365Domains = $ITGDomains | Where-Object { $_.attributes.name -in $Domains }
 
 # Get connectors to look for custom inbound/outbound setups
-$MXRecords = $Domains | Where-Object { $_ -notlike "*.onmicrosoft.com" } | Resolve-DnsName -Type MX | Where-Object { $_.QueryType -eq "MX" } | Select-Object NameExchange -ExpandProperty NameExchange | Sort-Object -Unique
+$MXRecords = $Domains | Where-Object { $_ -notlike "*.onmicrosoft.com" } | Resolve-DnsName -Type MX -ErrorAction Ignore | Where-Object { $_.QueryType -eq "MX" } | Select-Object NameExchange -ExpandProperty NameExchange | Sort-Object -Unique
 $InboundConnectors = Get-InboundConnector
-$OutboundConnectors = Get-OutboundConnector
 
-if ($ExistingFlexAsset -and $ExistingFlexAsset.attributes.traits.'outbound-smtp-host') {
+$OutboundSmtpHost = $MXRecords -join ", "
+if ($ExistingFlexAsset -and $ExistingFlexAsset.attributes.traits.'outbound-smtp-host' -and $ExistingFlexAsset.attributes.traits.'outbound-smtp-host' -notlike "*, *" -and $OutboundSmtpHost -like "*$($ExistingFlexAsset.attributes.traits.'outbound-smtp-host'.Trim())*") {
 	$OutboundSmtpHost = $ExistingFlexAsset.attributes.traits.'outbound-smtp-host'.Trim()
-} else {
-	$OutboundSmtpHost = $MXRecords -join ", "
 }
+if ($OutboundSmtpHost.length -gt 254) {
+	$MXRecords_Filtered = @()
+	foreach ($MXRecord in $MXRecords) {
+		$DomainMatches = $Domains | Where-Object { $CleanedDomain = $_ -replace "\.\w\w\w?", ""; $MXRecord -like "*$($CleanedDomain)*" }
+		$AntiSpamMatches = $AntiSpamOptions | Where-Object { $MXRecord -like "*$($_)*" }
+		if (($DomainMatches | Measure-Object).Count -gt 0 -or ($AntiSpamMatches | Measure-Object).Count -gt 0)	{
+			$MXRecords_Filtered += $MXRecord
+		}
+	}
+	$OutboundSmtpHost = $MXRecords_Filtered -join ", "
+}
+if ($OutboundSmtpHost.length -gt 254 -and $DefaultDomain -notlike "*.onmicrosoft.com") {
+	$MXRecords_Filtered = $DefaultDomain | Resolve-DnsName -Type MX -ErrorAction Ignore | Where-Object { $_.QueryType -eq "MX" } | Select-Object NameExchange -ExpandProperty NameExchange | Sort-Object -Unique
+	$OutboundSmtpHost = $MXRecords_Filtered -join ", "
+}
+$OutboundSmtpHost = $OutboundSmtpHost.substring(0, [System.Math]::Min(254, $OutboundSmtpHost.Length))
 
 if ($ExistingFlexAsset -and $ExistingFlexAsset.attributes.traits.'inbound-delivery') {
 	$InboundDelivery = $ExistingFlexAsset.attributes.traits.'inbound-delivery'
@@ -415,7 +430,7 @@ if ($ExistingFlexAsset -and $ExistingFlexAsset.attributes.traits.'inbound-delive
 # Find spam filter
 $AntiSpam = "Microsoft Office 365 (Standard)"
 $AntiSpamOptions | ForEach-Object {
-	if ($OutboundSmtpHost -like "*$_*") {
+	if ($MXRecords -like "*$_*") {
 		$AntiSpam = $_;
 		break;
 	}
@@ -552,11 +567,11 @@ if ($ExistingFlexAsset -and $ExistingFlexAsset.attributes.traits.'mfa-enabled' -
 	$MFAEnabled = "Setup In Progress"
 }
 
-$MGUsers = Get-MgUser -Filter 'accountEnabled eq true' -All
+$MGUsers = Get-MgUser -Filter 'accountEnabled eq true' -Property Id,DisplayName,UserType,GivenName,Surname,Mail,UserPrincipalName,AssignedLicenses -All
 $MFAUsers = 0
 $TotalUsers = 0
 foreach ($User in $MGUsers) {
-	if (!$User.GivenName -or !$User.Surname -or !$User.Mail -or $User.UserPrincipalName -notin $AllUserMailboxes.UserPrincipalName) {
+	if (!$User.GivenName -or !$User.Surname -or !$User.Mail -or $User.UserType -ne "Member" -or $User.AssignedLicenses.Count -lt 1 -or $User.UserPrincipalName -notin $AllUserMailboxes.UserPrincipalName) {
 		continue
 	}
 	$TotalUsers++
@@ -585,18 +600,18 @@ $GeoFiltering = "No"
 if ($ExistingFlexAsset -and $ExistingFlexAsset.attributes.traits.'azure-conditional-access-geo-filtering' -and $ExistingFlexAsset.attributes.traits.'azure-conditional-access-geo-filtering' -like "Custom Policies") {
 	$GeoFiltering = "Custom Policies"
 } else {
-	$AccessPolicies = Get-AzureADMSConditionalAccessPolicy
+	$AccessPolicies = Get-MgIdentityConditionalAccessPolicy
 	if ($AccessPolicies) {
 		$AccessPolicies = $AccessPolicies | Where-Object { $_.State -eq "enabled" }
 	}
 	if ($AccessPolicies) {
 		if ($ExistingFlexAsset -and $ExistingFlexAsset.attributes.traits.'azure-conditional-access-geo-filtering' -and $ExistingFlexAsset.attributes.traits.'azure-conditional-access-geo-filtering' -like "No") {
-			$GeoFilterPolicies = $AccessPolicies | Where-Object { ($_.DisplayName -like "*Country*" -or $_.DisplayName -like "*Countries*") -and $_.Conditions.Locations -and $_.Conditions.Locations.IncludeLocations -and $_.Conditions.Locations.IncludeLocations.Count -gt 0 -and $_.GrantControls.BuiltInControls -contains "Block" }
+			$GeoFilterPolicies = $AccessPolicies | Where-Object { ($_.DisplayName -like "*Country*" -or $_.DisplayName -like "*Countries*" -or $_.DisplayName -like "*Travel*") -and $_.Conditions.Locations -and $_.Conditions.Locations.IncludeLocations -and $_.Conditions.Locations.IncludeLocations.Count -gt 0 -and $_.GrantControls.BuiltInControls -contains "Block" }
 			if (($GeoFilterPolicies | Measure-Object).Count -gt 0) {
 				$GeoFiltering = "Yes"
 			}
 		} else {
-			$GeoFilterPolicies = $AccessPolicies | Where-Object { ($_.DisplayName -like "*Country*" -or $_.DisplayName -like "*Countries*") -or ($_.Conditions.Locations -and $_.Conditions.Locations.IncludeLocations -and $_.Conditions.Locations.IncludeLocations.Count -gt 0 -and $_.GrantControls.BuiltInControls -contains "Block") }
+			$GeoFilterPolicies = $AccessPolicies | Where-Object { ($_.DisplayName -like "*Country*" -or $_.DisplayName -like "*Countries*" -or $_.DisplayName -like "*Travel*") -or ($_.Conditions.Locations -and $_.Conditions.Locations.IncludeLocations -and $_.Conditions.Locations.IncludeLocations.Count -gt 0 -and $_.GrantControls.BuiltInControls -contains "Block") }
 			if (($GeoFilterPolicies | Measure-Object).Count -gt 0) {
 				$GeoFiltering = "Yes"
 			}
@@ -607,7 +622,7 @@ if ($ExistingFlexAsset -and $ExistingFlexAsset.attributes.traits.'azure-conditio
 # See if there is a Datto SaaS backup solution documented for this
 $BackupSolution = @()
 $ITGBackups = (Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $BackupFilterID.id -filter_organization_id $OrgID -page_size 1000).data
-$SaasBackups = $ITGBackups | Where-Object { $_.attributes.name -like "Datto - SaaS Protection*" }
+$SaasBackups = $ITGBackups | Where-Object { $_.attributes.name -like "*Datto*" -or $_.attributes.name -like "*SaaS*" }
 
 if ($SaasBackups -and ($SaasBackups | Measure-Object).Count -gt 0) {
 	$O365Backups = $SaasBackups | Where-Object {
@@ -628,6 +643,7 @@ if ($ExistingFlexAsset -and $ExistingFlexAsset.attributes.traits.'backup-solutio
 
 # Get subscribed licenses and create/update the license asset
 $LicenseAsset = $false
+$LinkLicenseAsset = $false
 if ($LicenseFlexAssetName -and $LicenseFilterID -and $LicenseFilterID.id) {
 	$AllLicenses = Get-MgSubscribedSku
 	$LicenseTranslationTable = Invoke-RestMethod -Method Get -Uri "https://download.microsoft.com/download/e/3/e/e3e9faf2-f28b-490a-9ada-c6089a1fc5b0/Product%20names%20and%20service%20plan%20identifiers%20for%20licensing.csv" | ConvertFrom-Csv
@@ -712,6 +728,7 @@ if ($LicenseFlexAssetName -and $LicenseFilterID -and $LicenseFilterID.id) {
 		}
 		Write-Host "Creating new Licensing flexible asset"
 		$LicenseAsset = New-ITGlueFlexibleAssets -data $LicenseFlexAssetBody
+		$LinkLicenseAsset = $true
 	}
 }
 
@@ -753,6 +770,12 @@ if (!$ExistingFlexAsset) {
 			}
 		}
 	}
+
+	# Filter out empty values
+	($FlexAssetBody.attributes.traits.GetEnumerator() | Where-Object { -not $_.Value }) | Foreach-Object { 
+		$FlexAssetBody.attributes.traits.Remove($_.Name) 
+	}
+
     Write-Host "Creating new Email flexible asset"
     $ExistingFlexAsset = New-ITGlueFlexibleAssets -data $FlexAssetBody
 	if ($ExistingFlexAsset -and $ExistingFlexAsset.data) {
@@ -826,7 +849,7 @@ else {
 }
 
 # Tag the licensing asset as a related item
-if ($LicenseAsset -and $LicenseAsset.data.id -and $ExistingFlexAsset -and $ExistingFlexAsset.id) {
+if ($LinkLicenseAsset -and $LicenseAsset -and $LicenseAsset.data.id -and $ExistingFlexAsset -and $ExistingFlexAsset.id) {
 	$RelatedItemsBody =
 	@{
 		type = 'related_items'
@@ -838,7 +861,7 @@ if ($LicenseAsset -and $LicenseAsset.data.id -and $ExistingFlexAsset -and $Exist
 	New-ITGlueRelatedItems -resource_type 'flexible_assets' -resource_id $ExistingFlexAsset.id -data $RelatedItemsBody
 }
 
-# Record an office 365 overview (remove from user audit if this autodoc is active on the same device)
+# Record an office 365 overview
 $UserO365ReportUpdated = $false
 if ($UpdateO365Report -and $O365LicenseTypes) {
 	Write-Host "Exporting Office 365 license report..."
