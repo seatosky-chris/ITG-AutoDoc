@@ -987,13 +987,15 @@ if ($UpdateO365Report -and $O365LicenseTypes) {
 		if ($Attachments -and ($Attachments | Measure-Object).Count -gt 0 -and $Attachments.attributes) {
 			$MonthsAttachment = $Attachments.attributes | Where-Object { $_.name -like $FileName + '*' -or $_."attachment-file-name" -like $FileName + '*' }
 			if ($MonthsAttachment) {
-				$data = @{ 
-					'type' = 'attachments'
-					'attributes' = @{
-						'id' = $MonthsAttachment.id
+				foreach ($Attachment in @($MonthsAttachment)) {
+					$data = @{ 
+						'type' = 'attachments'
+						'attributes' = @{
+							'id' = $Attachment.id
+						}
 					}
+					Remove-ITGlueAttachments -resource_type 'flexible_assets' -resource_id $ExistingLicenseOverview.data.id -data $data | Out-Null
 				}
-				Remove-ITGlueAttachments -resource_type 'flexible_assets' -resource_id $ExistingLicenseOverview.data.id -data $data | Out-Null
 			}
 		}
 	}
