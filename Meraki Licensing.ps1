@@ -395,12 +395,18 @@ foreach ($OrgLicensing in $LicenseInfo) {
 		foreach ($License in $OrgLicensing.licenses) {
 			$LicenseName = "Meraki Per-Device License (State: $($License.state))"
 
-			$MerakiDevice = $OrgLicensing.devices | Where-Object { $_.serial -eq $License.deviceSerial }
+			$MerakiDevice = $false
+			if ($License.deviceSerial) {
+				$MerakiDevice = $OrgLicensing.devices | Where-Object { $_.serial -eq $License.deviceSerial }
+			}
 			$ExistingLicense = $ExistingLicenses.licenses | Where-Object { $_.attributes.traits.name -like "Meraki Per-Device License*" -and $_.attributes.traits.'additional-notes' -like "*License ID: $($License.id)*" }
 
 			$AllDevices = $OrgDevices | Where-Object { $_.itgId -eq $Organization.itgId }
-			$OrgDevice = $AllDevices.devices | Where-Object { $_.attributes.'serial-number' -eq $License.deviceSerial -or $_.attributes.name -like $MerakiDevice.name }
-			$DeviceName = if ($OrgDevice) { $OrgDevice[0].attributes.name } else { $MerakiDevice.name }
+			$OrgDevice = $false
+			if ($License.deviceSerial -or $MerakiDevice) {
+				$OrgDevice = $AllDevices.devices | Where-Object { ($License.deviceSerial -and $_.attributes.'serial-number' -eq $License.deviceSerial) -or ($MerakiDevice -and $_.attributes.name -like $MerakiDevice.name) }
+			}
+			$DeviceName = if ($OrgDevice) { $OrgDevice[0].attributes.name } elseif ($MerakiDevice) { $MerakiDevice.name } else { "Unassigned" }
 
 			$ClaimDate = $null;
 			$RenewalDate = $null;
@@ -417,6 +423,9 @@ foreach ($OrgLicensing in $LicenseInfo) {
 			$AdditionalNotes += "License ID: $($License.id) <br>"
 			$AdditionalNotes += "Order #: $($License.orderNumber) <br>"
 			$AdditionalNotes += "Duration: $($License.durationInDays) days <br>"
+			if ($DeviceName -eq "Unassigned" -and $License.state -ne "active") {
+				$AdditionalNotes += "Unassigned License <br>"
+			}
 			$AdditionalNotes += "=================="
 
 			$FlexAssetBody = 
@@ -435,7 +444,7 @@ foreach ($OrgLicensing in $LicenseInfo) {
 						"purchase-date" = $ClaimDate
 						"renewal-date" = $RenewalDate
 						"additional-notes" = $AdditionalNotes
-						"assigned-device-s" = @($($OrgDevice.id | Sort-Object -Unique))
+						"assigned-device-s" = if ($OrgDevice) { @($($OrgDevice.id | Sort-Object -Unique)) } else { @() }
 					}
 				}
 			}
@@ -462,6 +471,11 @@ foreach ($OrgLicensing in $LicenseInfo) {
 						}
 						if($ExistingLicense.attributes.traits.'ticket-number-for-original-purchase') {
 							$FlexAssetBody.attributes.traits.'ticket-number-for-original-purchase' = $ExistingLicense.attributes.traits.'ticket-number-for-original-purchase'
+						}
+
+						# Filter out empty values
+						($FlexAssetBody.attributes.traits.GetEnumerator() | Where-Object { -not $_.Value }) | Foreach-Object { 
+							$FlexAssetBody.attributes.traits.Remove($_.Name) 
 						}
 	
 						Write-Host "Updating Per-Device License for: $($Organization.itgName) - $($DeviceName)"
