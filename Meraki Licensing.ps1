@@ -152,6 +152,41 @@ function loadForm($Path) {
 	return $Form
 }
 
+# Archives an ITG meraki license
+function archive_itg($FlexAssetID) {
+	$OriginalAsset = Get-ITGlueFlexibleAssets -id $FlexAssetID
+
+	if ($OriginalAsset -and $OriginalAsset.data -and ($OriginalAsset.data | Measure-Object).Count -eq 1) {
+		$OriginalAsset = $OriginalAsset.data[0]
+	} else {
+		Write-Warning "Could not find FlexAssetID $($FlexAssetID) in ITG. Skipping archival..."
+		return $false
+	}
+
+	$FlexAssetBody = 
+	@{
+		type = 'flexible-assets'
+		attributes = @{
+			'organization-id' = $OriginalAsset.attributes.'organization-id'
+			'flexible-asset-type-id' = $OriginalAsset.attributes.'flexible-asset-type-id'
+			'archived' = $true
+			traits = $OriginalAsset.attributes.traits
+		}
+	}
+	
+	if ($FlexAssetBody.attributes.traits."assigned-device-s") {
+		$FlexAssetBody.attributes.traits."assigned-device-s" = @($($FlexAssetBody.attributes.traits."assigned-device-s".values.id | Sort-Object -Unique))
+	}
+
+	try {
+		Set-ITGlueFlexibleAssets -id $FlexAssetID -data $FlexAssetBody
+		return $true
+	} catch {
+		Write-Error "Could not archive Meraki License '$FlexAssetID' for the reason: " + $_.Exception.Message
+		return $false
+	}
+}
+
 # Match the ITG / Meraki organizations by name
 $OrgMatches = @()
 $MatchNotFound = @()
@@ -664,5 +699,53 @@ foreach ($OrgLicensing in $LicenseInfo) {
 			ContentType = "application/json"
 		}			
 		Invoke-RestMethod @Params 
+	}
+}
+
+# Go through all existing ITG Meraki licensing assets and archive any that no longer exist in Meraki
+foreach ($ExistingLicense in $OrgExistingLicenses.licenses) {
+	$Match = $ExistingLicense.attributes.traits.'additional-notes' -match "Meraki ID: (\d+)"
+	$MerakiID = $false
+	if ($Match -and $Matches[1]) {
+		$MerakiID = $Matches[1]
+	}
+
+	$Match = $ExistingLicense.attributes.traits.'additional-notes' -match "License ID: (\d+)"
+	$LicenseID = $false
+	if ($Match -and $Matches[1]) {
+		$LicenseID = $Matches[1]
+	}
+
+	if (!$LicenseID -and $MerakiID) {
+		# Co-term licensing
+		if ($LicenseInfo.merakiId -contains $MerakiID) {
+			# current license, skip
+			continue
+		} else {
+			# license is no longer in the portal, archive
+			$Archived = archive_itg -FlexAssetID $ExistingLicense.id
+			if ($Archived) {
+				Write-Host "Archived: $($ExistingLicense.attributes.name) (ID: $($ExistingLicense.id)) @ $($ExistingLicense.attributes.'organization-name')"
+			} else {
+				Write-Error "Failed to archive: $($ExistingLicense.attributes.name) (ID: $($ExistingLicense.id)) @ $($ExistingLicense.attributes.'organization-name')"
+			}
+		}
+	} elseif ($LicenseID) {
+		# Per-device licensing
+		if (($LicenseInfo | Where-Object { $_.merakiID -eq $MerakiID }).licenses.id -contains $LicenseID) {
+			# current license, skip
+			continue
+		} else {
+			# license is no longer in the portal, archive
+			$Archived = archive_itg -FlexAssetID $ExistingLicense.id
+			if ($Archived) {
+				Write-Host "Archived: $($ExistingLicense.attributes.name) (ID: $($ExistingLicense.id)) @ $($ExistingLicense.attributes.'organization-name')"
+			} else {
+				Write-Error "Failed to archive: $($ExistingLicense.attributes.name) (ID: $($ExistingLicense.id)) @ $($ExistingLicense.attributes.'organization-name')"
+			}
+		}
+	} else {
+		# No license info, skip
+		continue
 	}
 }
