@@ -27,6 +27,7 @@ $BackupFlexAssetName = "Backup"
 $ADGroupsFlexAssetName = "AD Security Groups"
 $CustomOverview_FlexAssetID = 111
 $UpdateO365Report = $true # Turns on/off the O365 overview export (the user audit also can create this)
+$UserAudit_CustomPath = $false # Optional string, the custom path to the User Audit folder (for if it's not at the same path as this file or up one folder)
 $Description = "Auto documentation of all O365 email configuration."
 
 $ManagementLogin_PasswordCategories = @("Cloud Management / Licensing Portal", "Microsoft 365", "Office 365", "Microsoft 365 - Global Admin") # Possible categorires from management login passwords
@@ -966,7 +967,10 @@ if ($UpdateO365Report -and $O365LicenseTypes) {
 	$MonthName = (Get-Culture).DateTimeFormat.GetMonthName([int](Get-Date -Format MM))
 	$Year = Get-Date -Format yyyy
 	$FileName = "$($OrgShortName)--O365_License_Overview--$($MonthName)_$Year.xlsx"
-	if ([System.IO.File]::Exists(($PSScriptRoot + "\..\UserAudit\O365LicenseOverview")) -or [System.IO.File]::Exists(($PSScriptRoot + "\..\UserAudit\User Audit.ps1"))) {
+	if ($UserAudit_CustomPath -and ([System.IO.File]::Exists("$UserAudit_CustomPath\O365LicenseOverview") -or [System.IO.File]::Exists("$UserAudit_CustomPath\User Audit.ps1"))) {
+		New-Item -ItemType Directory -Force -Path ("$UserAudit_CustomPath\O365LicenseOverview") | Out-Null
+		$Path = "$UserAudit_CustomPath\O365LicenseOverview\$FileName"
+	} elseif ([System.IO.File]::Exists(($PSScriptRoot + "\..\UserAudit\O365LicenseOverview")) -or [System.IO.File]::Exists(($PSScriptRoot + "\..\UserAudit\User Audit.ps1"))) {
 		New-Item -ItemType Directory -Force -Path ($PSScriptRoot + "\..\UserAudit\O365LicenseOverview") | Out-Null
 		$Path = $PSScriptRoot + "\..\UserAudit\O365LicenseOverview\$FileName"
 	} elseif ([System.IO.File]::Exists(($PSScriptRoot + "\..\O365LicenseOverview")) -or [System.IO.File]::Exists(($PSScriptRoot + "\..\User Audit.ps1"))) {
