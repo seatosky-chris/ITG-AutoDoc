@@ -6,6 +6,7 @@ $LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
 $UpdateOnly = $false # If set to $true, the script will only update existing assets. If $false, it will add new groups and add them to ITG with as much info as possible.
 $FlexAssetName = "Email Groups"
 $ADGroupsFlexAssetName = "AD Security Groups" # If you don't document AD groups, set to $false
+$UserAudit_CustomPath = $false # Optional string, the custom path to the User Audit folder (for if it's not at the same path as this file or up one folder)
 $Description = "Auto documentation of all O365 distribution lists and shared mailboxes."
 ################# /IT-Glue Information #####################################
 
@@ -72,10 +73,15 @@ if ($ADGroupsFlexAssetName) {
 # If a matched user list csv (from the user audit) exists, get that and user it later for matching ITG contacts to AD usernames
 $OrganizationInfo = (Get-ITGlueOrganizations -id $orgID).data
 $OrgShortName = $OrganizationInfo[0].attributes."short-name"
-if (Test-Path -Path "C:\seatosky\UserAudit\$($OrgShortName)_Matched_User_List.csv" -PathType Leaf) {
-	$MatchedUserList = Import-CSV "C:\seatosky\UserAudit\$($OrgShortName)_Matched_User_List.csv"
-} elseif (Test-Path -Path "C:\seatosky\$($OrgShortName)_Matched_User_List.csv" -PathType Leaf) {
-	$MatchedUserList = Import-CSV "C:\seatosky\$($OrgShortName)_Matched_User_List.csv"
+
+if ($UserAudit_CustomPath -and [System.IO.File]::Exists("$UserAudit_CustomPath\$($OrgShortName)_Matched_User_List.csv")) {
+	$MatchedUserList = Import-CSV "$UserAudit_CustomPath\$($OrgShortName)_Matched_User_List.csv"
+} elseif ([System.IO.File]::Exists("$PSScriptRoot\$($OrgShortName)_Matched_User_List.csv")) {
+	$MatchedUserList = Import-CSV "$PSScriptRoot\$($OrgShortName)_Matched_User_List.csv"
+} elseif ([System.IO.File]::Exists("$PSScriptRoot\..\$($OrgShortName)_Matched_User_List.csv")) {
+	$MatchedUserList = Import-CSV "$PSScriptRoot\..\$($OrgShortName)_Matched_User_List.csv"
+} elseif ([System.IO.File]::Exists("$PSScriptRoot\..\UserAudit\$($OrgShortName)_Matched_User_List.csv")) {
+	$MatchedUserList = Import-CSV "$PSScriptRoot\..\UserAudit\$($OrgShortName)_Matched_User_List.csv"
 } else {
 	$MatchedUserList = @()
 }
