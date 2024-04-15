@@ -20,7 +20,7 @@ $IgnoreLocalGroups = $true # If true, it will ignore permissions of local groups
 ####################################################################
 
 # Ensure they are using the latest TLS version
-$CurrentTLS = [System.Net.ServicePointManager]::SecurityProtocol
+$CurrentTLS = [SystemNet.ServicePointManager]::SecurityProtocol
 if ($CurrentTLS -notlike "*Tls12" -and $CurrentTLS -notlike "*Tls13") {
 	[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 	Write-Host "This device is using an old version of TLS. Temporarily changed to use TLS v1.2."
@@ -52,7 +52,7 @@ $ADGroupsFilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $ADGroupsAssetNam
 
 # Get existing shares
 Write-Host "Downloading existing shares"
-$ExistingShares = (Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $Filterid.id -filter_organization_id $orgID).data
+$ExistingShares = (Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $Filterid.id -filter_organization_id $orgID -page_size 1000).data
 $TotalShares = ($ExistingShares | Measure-Object).Count
 Write-Host "Downloaded $TotalShares shares"
 

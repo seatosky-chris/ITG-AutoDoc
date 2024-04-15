@@ -36,7 +36,7 @@ $ADGroupsFilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $ADGroupsAssetNam
 
 # Get existing shares
 Write-Host "Downloading existing shares"
-$ExistingShares = (Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $Filterid.id -filter_organization_id $orgID).data
+$ExistingShares = (Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $Filterid.id -filter_organization_id $orgID -page_size 1000).data
 $TotalShares = ($ExistingShares | Measure-Object).Count
 Write-Host "Downloaded $TotalShares shares"
 
