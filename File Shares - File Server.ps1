@@ -13,7 +13,11 @@ $IgnoreShares = @(
 # Ignore by path
 $IgnoreSharePaths = @(
 	"C:\Windows\system32*", "*\DFSRoots\*"
-) 
+)
+# Full access accounts for permissions file (generally the account(s) that will run this autodoc) (if you don't include the domain, it will be auto appended to the username, for local accounts append .\)
+$FullAccessAccounts_PermsFile = @(
+	"seatosky", "sts-autodoc"
+)
 $RecursiveDepth = 3 # How deep in the file structure to look for permissions
 $IgnoreLocalGroups = $true # If true, it will ignore permissions of local groups/accounts and only look up domain groups & accounts
 $PermissionsFileUUID = "XXXX"
@@ -148,8 +152,57 @@ foreach ($SMBShare in $AllSmbShares) {
 
 	# Also save a permissions json file to the file share for the AD Server portion to use for updating
 	$PermsJson = ($Permissions | ConvertTo-EnumsAsStrings -Depth 10 | ConvertTo-Json -Depth 10)
+	$PermissionsBackupFileLoc = $DiskPath + "/PermissionsBackup_$PermissionsFileUUID.json"
+
+	Remove-Item $PermissionsBackupFileLoc -Force -ErrorAction Ignore # Remove first as sometimes due to a permissions error we can't overwrite the file
+
 	$PermsJson | Out-File -FilePath ($DiskPath + "/PermissionsBackup_$PermissionsFileUUID.json")
-	(get-item ($DiskPath + "/PermissionsBackup_$PermissionsFileUUID.json")).Attributes += 'Hidden'
+
+	# Set permissions on the file to ensure no access right issues when accessing it later
+	if ($FullAccessAccounts_PermsFile -and $FullAccessAccounts_PermsFile.Count -gt 0) {
+		$CurUser = [Security.Principal.WindowsIdentity]::GetCurrent()
+		$Domain = $CurUser.Name.Split("\")[0]
+		if (!$Domain) {
+			$Domain = $env:USERDNSDOMAIN -replace ".local", ""
+		}
+		$PermFileACL = Get-Acl $PermissionsBackupFileLoc
+
+		# Set owner
+		$UserAccount = $FullAccessAccounts_PermsFile[0]
+		$NewUsername = $UserAccount
+		if ($UserAccount -notlike "*\*" -and $UserAccount -notlike "*/*" -and $Domain) {
+			$NewUsername = $Domain + "\" + $UserAccount
+		}
+		$NewUser = [System.Security.Principal.NTAccount] $NewUsername
+		$PermFileACL.SetOwner($NewUser)
+
+		# Setup file permissions
+		$PermFileACL.SetAccessRuleProtection($true,$false)
+		
+		$AccessRule = New-Object System.Security.AccessControl.FileSystemAccessRule("Domain Admins", "FullControl", "Allow")
+		$PermFileACL.SetAccessRule($AccessRule)
+		$AccessRule = New-Object System.Security.AccessControl.FileSystemAccessRule("SYSTEM", "FullControl", "Allow")
+		$PermFileACL.SetAccessRule($AccessRule)
+
+		$AccessRule = New-Object System.Security.AccessControl.FileSystemAccessRule("Domain Users","Read","Allow")
+		$PermFileACL.RemoveAccessRule($AccessRule)
+		$AccessRule = New-Object System.Security.AccessControl.FileSystemAccessRule("Everyone","Read","Allow")
+		$PermFileACL.RemoveAccessRule($AccessRule)
+
+		foreach ($UserAccount in $FullAccessAccounts_PermsFile) {
+			$NewUsername = $UserAccount
+			if ($UserAccount -notlike "*\*" -and $UserAccount -notlike "*/*" -and $Domain) {
+				$NewUsername = $Domain + "\" + $UserAccount
+			}
+			$NewUser = [System.Security.Principal.NTAccount] $NewUsername
+			
+			$AccessRule = New-Object System.Security.AccessControl.FileSystemAccessRule($NewUsername, "FullControl", "Allow")
+			$PermFileACL.SetAccessRule($AccessRule)
+		}
+
+		Set-Acl -aclobject $PermFileACL -path $PermissionsBackupFileLoc
+	}
+	(get-item $PermissionsBackupFileLoc).Attributes += 'Hidden'
 	
 	# Get existing asset to update (if one exists)
 	$ExistingShare = $ExistingShares | Where-Object { $_.attributes.traits."disk-path-on-server" -eq $DiskPath -and $_.attributes.traits.servers.values.id -contains $Servers[0] -and $_.attributes.traits."share-type" -eq "Windows File Share" } | Select-Object -First 1
