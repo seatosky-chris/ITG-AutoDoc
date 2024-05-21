@@ -333,7 +333,7 @@ foreach ($AzureADConnect_Account in @($AzureADConnect_Accounts)) {
 
 if (($ITG_AzureADConnect_Accounts | Measure-Object).Count -gt 2) {
 	$PossibleUsernames = $PossibleUsernames | Sort-Object -Unique
-	$ITG_AzureADConnect_Accounts_Filtered = $ITG_AzureADConnect_Accounts | Where-Object { $Account = $_; $Account.attributes.username -and ($PossibleUsernames | Foreach-Object { if ($Account.attributes.username.Trim() -like $_) { return $true; break; } }) }
+	$ITG_AzureADConnect_Accounts_Filtered = $ITG_AzureADConnect_Accounts | Where-Object { $Account = $_; $Account.attributes.username -and ($PossibleUsernames | Foreach-Object { if ($Account.attributes.username.Trim() -like $_) { return $true; } }) }
 
 	if (($ITG_AzureADConnect_Accounts_Filtered | Measure-Object).Count -gt 0) {
 		$ITG_AzureADConnect_Accounts = $ITG_AzureADConnect_Accounts_Filtered
@@ -434,9 +434,9 @@ if ($ExistingFlexAsset -and $ExistingFlexAsset.attributes.traits.'inbound-delive
 
 # Find spam filter
 $AntiSpam = "Microsoft Office 365 (Standard)"
-$AntiSpamOptions | ForEach-Object {
-	if ($MXRecords -like "*$_*") {
-		$AntiSpam = $_;
+foreach ($Option in $AntiSpamOptions) {
+	if ($MXRecords -like "*$Option*") {
+		$AntiSpam = $Option;
 		break;
 	}
 }
@@ -924,8 +924,13 @@ if ($UpdateO365Report -and $O365LicenseTypes) {
 	$ExistingLicenseOverview = Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $CustomOverview_FlexAssetID -filter_organization_id $orgID -include attachments
 	if (($ExistingLicenseOverview.data | Where-Object { $_.attributes.traits.name -eq "Office 365 License Overview - $($TenantDetails.DisplayName)" } | Measure-Object).Count -gt 0) {
 		$ExistingLicenseOverview.data = $ExistingLicenseOverview.data | Where-Object { $_.attributes.traits.name -eq "Office 365 License Overview - $($TenantDetails.DisplayName)" }  | Select-Object -First 1
-	} else {
+	} elseif (($ExistingLicenseOverview.data | Where-Object { $_.attributes.traits.name -eq "Office 365 License Overview" } | Measure-Object).Count -gt 0) {
 		$ExistingLicenseOverview.data = $ExistingLicenseOverview.data | Where-Object { $_.attributes.traits.name -eq "Office 365 License Overview" }  | Select-Object -First 1
+	} else {
+		$ExistingLicenseOverview.data = $ExistingLicenseOverview.data | Where-Object { $_.attributes.traits.name -eq "Office 365 License Overview*" }  | Select-Object -First 1
+	}
+	if ($ExistingLicenseOverview.data -and $ExistingLicenseOverview.data.id) {
+		$ExistingLicenseOverview = Get-ITGlueFlexibleAssets -id $ExistingLicenseOverview.data.id -include attachments
 	}
 
 	if (!$ExistingLicenseOverview.data) {
@@ -995,15 +1000,16 @@ if ($UpdateO365Report -and $O365LicenseTypes) {
 		if ($Attachments -and ($Attachments | Measure-Object).Count -gt 0 -and $Attachments.attributes) {
 			$MonthsAttachment = $Attachments.attributes | Where-Object { $_.name -like $FileName + '*' -or $_."attachment-file-name" -like $FileName + '*' }
 			if ($MonthsAttachment) {
+				$data = @()
 				foreach ($Attachment in @($MonthsAttachment)) {
-					$data = @{ 
+					$data += @{ 
 						'type' = 'attachments'
 						'attributes' = @{
 							'id' = $Attachment.id
 						}
 					}
-					Remove-ITGlueAttachments -resource_type 'flexible_assets' -resource_id $ExistingLicenseOverview.data.id -data $data | Out-Null
 				}
+				Remove-ITGlueAttachments -resource_type 'flexible_assets' -resource_id $ExistingLicenseOverview.data.id -data $data | Out-Null
 			}
 		}
 	}
