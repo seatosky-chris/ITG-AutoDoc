@@ -45,7 +45,9 @@ $O365UnattendedLogin = @{
 }
 #################### /O365 Unattended Login using Certs ####################
 
-if ([System.IO.File]::Exists("$PSScriptRoot\O365Licenses.ps1")) {
+if ($UserAudit_CustomPath -and [System.IO.File]::Exists("$UserAudit_CustomPath\O365Licenses.ps1")) {
+	. "$UserAudit_CustomPath\O365Licenses.ps1"
+} elseif ([System.IO.File]::Exists("$PSScriptRoot\O365Licenses.ps1")) {
 	. "$PSScriptRoot\O365Licenses.ps1"
 } elseif ([System.IO.File]::Exists("$PSScriptRoot\..\O365Licenses.ps1")) {
 	. "$PSScriptRoot\..\O365Licenses.ps1"
