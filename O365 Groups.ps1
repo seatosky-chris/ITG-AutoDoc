@@ -5,6 +5,7 @@ $APIEndpoint = "<ITG API URL>"
 $LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
 $UpdateOnly = $false # If set to $true, the script will only update existing assets. If $false, it will add new groups and add them to ITG with as much info as possible.
 $FlexAssetName = "Email Groups"
+$Email_FlexAssetName = "Email"
 $ADGroupsFlexAssetName = "AD Security Groups" # If you don't document AD groups, set to $false
 $UserAudit_CustomPath = $false # Optional string, the custom path to the User Audit folder (for if it's not at the same path as this file or up one folder)
 $Description = "Auto documentation of all O365 distribution lists and shared mailboxes."
@@ -132,6 +133,19 @@ if ($ADGroupsFilterID) {
 		Write-Host "- Total: $TotalADGroups"
 		$i++
 	}
+}
+
+# Get O365 tenant info
+$TenantDetails = Get-AzureADTenantDetail
+$DefaultDomain = ($TenantDetails.VerifiedDomains | Where-Object { $_._Default }).Name
+$Email_FilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $Email_FlexAssetName).data
+$O365TenantFlexAsset = (Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $Email_FilterID.id -filter_organization_id $orgID).data | Where-Object { $_.attributes.traits.'type' -eq "Office 365" -and $_.attributes.traits.'default-domain' -eq $DefaultDomain }
+if (($O365TenantFlexAsset | Measure-Object).Count -gt 1) {
+	$O365TenantFlexAsset = $O365TenantFlexAsset | Sort-Object -Property {$_.attributes.'updated-at'} -Descending | Select-Object -First 1
+}
+$O365TenantText = $DefaultDomain
+if ($O365TenantFlexAsset) {
+	$O365TenantText += " (ITG ID: $($O365TenantFlexAsset.id))"
 }
 
 # Get disabled accounts, unlicensed accounts, and guests to add extra data to tables
@@ -535,6 +549,7 @@ function UpdateGroupAsset {
 					"ad-access-group" = $ADGroups
 					"objectid" = $GroupID
 					"created-on" = $CreatedOn
+					"o365-tenant-domain" = $O365TenantText
 					"configuration-details" = $ConfigurationDetails
 					"email-addresses" = $EmailAddresses
 					"owners" = @($($OwnerUsers.id | Sort-Object -Unique))
@@ -583,6 +598,7 @@ function UpdateGroupAsset {
 						"ad-access-group" = $ADAccessGroup
 						"objectid" = $GroupID
 						"created-on" = $ExistingGroup.attributes.traits."created-on"
+						"o365-tenant-domain" = $O365TenantText
 						"configuration-details" = $ExistingGroup.attributes.traits."configuration-details"
 						"email-addresses" = $EmailAddresses
 						"group-details" = $ExistingGroup.attributes.traits."group-details"
@@ -602,7 +618,7 @@ function UpdateGroupAsset {
 		}
 
 		Write-Host "Updating Flexible Asset - $($ExistingGroup.attributes.traits."group-name")"
-		$Response = Set-ITGlueFlexibleAssets -id $ExistingGroup.id  -data $FlexAssetBody
+		$Response = Set-ITGlueFlexibleAssets -id $ExistingGroup.id -data $FlexAssetBody
 		if ($Response.Error -and $Response.Error -like "422 - *") {
 			Write-Host "Error uploading flexible asset, too large. Trying again - $GroupName" -ForegroundColor Yellow
 			$FlexAssetBody.attributes.traits.Remove("member-mailboxes") 
