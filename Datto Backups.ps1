@@ -64,6 +64,15 @@ Add-DattoAPIKey -Api_Key_Public $DattoAPICreds.PublicKey -Api_Key_Secret $DattoA
 # Get the flexible asset type id
 $FilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $FlexAssetName).data
 
+# Verify we can connect to the ITG API (if we can't this can cause duplicates)
+$ITGOrgs = Get-ITGlueOrganizations -page_size 1000
+if (!$ITGOrgs -or !$ITGOrgs.data -or !$FilterID -or ($ITGOrgs.data | Measure-Object).Count -lt 1 -or !$ITGOrgs.data[0].attributes -or !$ITGOrgs.data[0].attributes.name) {
+	Write-Error "Could not connect to the IT Glue API. Exiting..."
+	exit 1
+} else {
+	Write-Host "Successfully connected to the ITG API."
+}
+
 Function IIf($If, $Then, $Else) {
     If ($If -IsNot "Boolean") {$_ = $If}
     If ($If) {If ($Then -is "ScriptBlock") {&$Then} Else {$Then}}
@@ -454,7 +463,6 @@ $Whitespace = "<br/>"
 $TableStyling = "<th>", "<th class='bg-info'>"
 
 # Get a list of ITG organizations, Datto orgs, and Datto BDR devices
-$ITGOrgs = 	Get-ITGlueOrganizations -page_size 1000
 $ITGOrgs = $ITGOrgs.data | Where-Object { $_.attributes.'organization-type-name' -like 'Customer' -and $_.attributes.'organization-status-name' -like 'Active' }
 
 $BDRDevices = Get-DattoDevice

@@ -44,6 +44,18 @@ If (Get-Module -ListAvailable -Name "ITGlueAPI") {
 Add-ITGlueBaseURI -base_uri $APIEndpoint
 Add-ITGlueAPIKey $APIKEy
 
+# Get the flexible assets ID
+$FilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $FlexAssetName).data
+
+# Verify we can connect to the ITG API (if we can't this can cause duplicates)
+$OrganizationInfo = Get-ITGlueOrganizations -id $orgID
+if (!$OrganizationInfo -or !$OrganizationInfo.data -or !$FilterID -or ($OrganizationInfo.data | Measure-Object).Count -lt 1 -or !$OrganizationInfo.data[0].attributes -or !$OrganizationInfo.data[0].attributes."short-name") {
+	Write-Error "Could not connect to the IT Glue API. Exiting..."
+	exit 1
+} else {
+	Write-Host "Successfully connected to the ITG API."
+}
+
 Function IIf($If, $Then, $Else) {
     If ($If -IsNot "Boolean") {$_ = $If}
     If ($If) {If ($Then -is "ScriptBlock") {&$Then} Else {$Then}}
@@ -443,11 +455,11 @@ $PhysicalConfig = if ($AtAGlanceHash.'Dell server' -eq $true) {
     "Could not retrieve physical host settings - This server is not a Dell Physical machine"
 }
   
-# Get the flexible assets ID
-$FilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $FlexAssetName).data
-  
 # Upload data to IT-Glue. We try to match the Server name to current computer name.
 $ExistingFlexAsset = (Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $Filterid.id -filter_organization_id $orgID).data | Where-Object { $_.attributes.traits.'ad-full-name' -eq $RawAD.ForestName }
+if (($ExistingFlexAsset | Measure-Object).Count -gt 1) {
+	$ExistingFlexAsset = $ExistingFlexAsset | Sort-Object -Property {$_.attributes.'updated-at'} -Descending | Select-Object -First 1
+}
   
 # If the Asset does not exist, create a new asset, if it does exist we'll combine the old and the new
 if (!$ExistingFlexAsset) {

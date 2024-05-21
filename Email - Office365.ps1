@@ -4,7 +4,7 @@
 # Created Date: Friday, September 29th 2023, 4:58:10 pm
 # Author: Chris Jantzen
 # -----
-# Last Modified: Tue Oct 24 2023
+# Last Modified: Tue May 21 2024
 # Modified By: Chris Jantzen
 # -----
 # Copyright (c) 2023 Sea to Sky Network Solutions
@@ -135,6 +135,14 @@ $BackupFilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $BackupFlexAssetNam
 $ADGroupsFilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $ADGroupsFlexAssetName).data
 $CustomOverview_FlexAssetID = (Get-ITGlueFlexibleAssetTypes -filter_name $CustomOverviewFlexAssetName).data[0].id
 
+# Verify we can connect to the ITG API (if we can't this can cause duplicates)
+$OrganizationInfo = Get-ITGlueOrganizations -id $orgID
+if (!$OrganizationInfo -or !$OrganizationInfo.data -or !$FilterID -or ($OrganizationInfo.data | Measure-Object).Count -lt 1 -or !$OrganizationInfo.data[0].attributes -or !$OrganizationInfo.data[0].attributes."short-name") {
+	Write-Error "Could not connect to the IT Glue API. Exiting..."
+	exit 1
+} else {
+	Write-Host "Successfully connected to the ITG API."
+}
 
 # Get Tenant details and domains (for matching the email asset and/or updating the domains in the asset)
 $TenantDetails = Get-AzureADTenantDetail
@@ -971,7 +979,7 @@ if ($UpdateO365Report -and $O365LicenseTypes) {
 	}
 
 	# Create the O365 overview excel document
-	$OrganizationInfo = (Get-ITGlueOrganizations -id $OrgID).data
+	$OrganizationInfo = $OrganizationInfo.data
 	$OrgShortName = $OrganizationInfo[0].attributes."short-name"
 	$MonthName = (Get-Culture).DateTimeFormat.GetMonthName([int](Get-Date -Format MM))
 	$Year = Get-Date -Format yyyy

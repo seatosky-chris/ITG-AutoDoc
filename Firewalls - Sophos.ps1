@@ -4,7 +4,7 @@
 # Created Date: Tuesday, February 14th 2023, 11:56:58 am
 # Author: Chris Jantzen
 # -----
-# Last Modified: Tue Mar 07 2023
+# Last Modified: Tue May 21 2024
 # Modified By: Chris Jantzen
 # -----
 # Copyright (c) 2023 Sea to Sky Network Solutions
@@ -59,6 +59,15 @@ Add-ITGlueAPIKey $APIKEy
 
 # Get the flexible asset type ids
 $FilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $FlexAssetName).data
+
+# Verify we can connect to the ITG API (if we can't this can cause duplicates)
+$ITGOrgs = Get-ITGlueOrganizations -page_size 1000
+if (!$ITGOrgs -or !$ITGOrgs.data -or !$FilterID -or ($ITGOrgs.data | Measure-Object).Count -lt 1 -or !$ITGOrgs.data[0].attributes -or !$ITGOrgs.data[0].attributes.name) {
+	Write-Error "Could not connect to the IT Glue API. Exiting..."
+	exit 1
+} else {
+	Write-Host "Successfully connected to the ITG API."
+}
 
 # Sophos connection functions
 $Global:SophosJWT = $false
@@ -153,7 +162,6 @@ if ($Global:SophosJWT) {
 }
 
 # Get a list of ITG organizations (we already got the Sophos tenants)
-$ITGOrgs = 	Get-ITGlueOrganizations -page_size 1000
 $ITGOrgs = $ITGOrgs.data | Where-Object { $_.attributes.'organization-type-name' -like 'Customer' -and $_.attributes.'organization-status-name' -like 'Active' }
 
 # Levenshtein distance function for comparing similarity between two strings

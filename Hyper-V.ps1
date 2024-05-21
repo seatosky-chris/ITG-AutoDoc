@@ -44,6 +44,15 @@ Add-ITGlueAPIKey $APIKEy
 $FilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $FlexAssetName).data
 $Cluster_FilterID  = (Get-ITGlueFlexibleAssetTypes -filter_name $Cluster_FlexAssetName).data
 
+# Verify we can connect to the ITG API (if we can't this can cause duplicates)
+$OrganizationInfo = Get-ITGlueOrganizations -id $orgID
+if (!$OrganizationInfo -or !$OrganizationInfo.data -or !$FilterID -or ($OrganizationInfo.data | Measure-Object).Count -lt 1 -or !$OrganizationInfo.data[0].attributes -or !$OrganizationInfo.data[0].attributes."short-name") {
+	Write-Error "Could not connect to the IT Glue API. Exiting..."
+	exit 1
+} else {
+	Write-Host "Successfully connected to the ITG API."
+}
+
 # Get all configurations for filtering
 $Configurations = Get-ITGlueConfigurations -page_size "1000" -organization_id $OrgID
 $i = 1
