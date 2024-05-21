@@ -5,6 +5,7 @@ $APIEndpoint = "<ITG API URL>"
 $LastUpdatedUpdater_APIURL = "<LastUpdatedUpdater API URL>"
 $UpdateOnly = $false # If set to $true, the script will only update existing assets. If $false, it will add new groups (that have members) and add them to ITG with as much info as possible.
 $FlexAssetName = "AD Security Groups"
+$AD_FlexAssetName = "Active Directory"
 $Description = "Updates/creates all security groups in ITG with their members and parents. When creating new one's it will do its best to categorize them properly."
 $EmployeeContactTypes = @( 
 	"Approver", "Champion", "Contractor", "Decision Maker", "Employee", "Employee - On Leave",
@@ -117,6 +118,19 @@ while ($FullConfigurationsList.links.next) {
 	$FullConfigurationsList.links = $Configurations_Next.links
 }
 $FullConfigurationsList = $FullConfigurationsList.data
+
+# Get AD site details
+$ForestInformation = $(Get-ADForest)
+$ADSiteName = $ForestInformation.Name
+$AD_FilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $AD_FlexAssetName).data
+$ADFlexAsset = (Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $AD_FilterID.id -filter_organization_id $OrgID).data | Where-Object { $_.attributes.traits.'ad-full-name' -eq $ADSiteName }
+if (($ADFlexAsset | Measure-Object).Count -gt 1) {
+	$ADFlexAsset = $ADFlexAsset | Sort-Object -Property {$_.attributes.'updated-at'} -Descending | Select-Object -First 1
+}
+$ADSiteText = $ADSiteName
+if ($ADFlexAsset) {
+	$ADSiteText += " (ITG ID: $($ADFlexAsset.id))"
+}
 
 # Collect Data
 Write-Host "Updating Groups"
@@ -348,6 +362,7 @@ foreach ($Group in $AllGroups) {
 					"folder-traverse" = $IsTraverse
 					"folder-access-type" = $FolderAccessType
 					"guid" = $($group.objectguid.guid)
+					"ad-site" = $ADSiteText
 					"group-details" = $GroupDetails
 					"member-groups" = $($MemberGroups.id | Sort-Object -Unique)
 					"member-users" = $($MemberUsers.id | Sort-Object -Unique)
@@ -390,6 +405,7 @@ foreach ($Group in $AllGroups) {
 						"who-to-add" = $ExistingGroup.attributes.traits."who-to-add"
 						"approver-for-access" = @($ExistingGroup.attributes.traits."approver-for-access".values.id)
 						"guid" = $($group.objectguid.guid)
+						"ad-site" = $ADSiteText
 						"group-details" = $ExistingGroup.attributes.traits."group-details"
 						"member-groups" = $($MemberGroups.id | Sort-Object -Unique)
 						"member-users" = $($MemberUsers.id | Sort-Object -Unique)
