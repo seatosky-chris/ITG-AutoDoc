@@ -25,7 +25,7 @@ $FlexAssetName = "Email"
 $LicenseFlexAssetName = "Licensing"
 $BackupFlexAssetName = "Backup"
 $ADGroupsFlexAssetName = "AD Security Groups"
-$CustomOverview_FlexAssetID = 111
+$CustomOverviewFlexAssetName = "Custom Overview"
 $UpdateO365Report = $true # Turns on/off the O365 overview export (the user audit also can create this)
 $UserAudit_CustomPath = $false # Optional string, the custom path to the User Audit folder (for if it's not at the same path as this file or up one folder)
 $Description = "Auto documentation of all O365 email configuration."
@@ -131,6 +131,8 @@ $FilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $FlexAssetName).data
 $LicenseFilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $LicenseFlexAssetName).data
 $BackupFilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $BackupFlexAssetName).data
 $ADGroupsFilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $ADGroupsFlexAssetName).data
+$CustomOverview_FlexAssetID = (Get-ITGlueFlexibleAssetTypes -filter_name $CustomOverviewFlexAssetName).data[0].id
+
 
 # Get Tenant details and domains (for matching the email asset and/or updating the domains in the asset)
 $TenantDetails = Get-AzureADTenantDetail
