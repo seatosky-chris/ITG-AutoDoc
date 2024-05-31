@@ -4,7 +4,7 @@
 # Created Date: Tuesday, February 14th 2023, 11:56:58 am
 # Author: Chris Jantzen
 # -----
-# Last Modified: Tue May 21 2024
+# Last Modified: Mon May 27 2024
 # Modified By: Chris Jantzen
 # -----
 # Copyright (c) 2023 Sea to Sky Network Solutions
@@ -446,13 +446,18 @@ $ITGSophosModels = (Get-ITGlueModels -manufacturer_id $SophosManufacturerID -pag
 
 if (!$ITGFirewalls -or !$ITGSophosModels) {
 	Write-Error "Could not get ITG Firewalls or ITG Sophos Models"
-	exit
+	exit 1
 }
 
 # Get the Firewalls flexible asset fields so we can ensure the model is an existing choice
 $Firewall_FAFields = (Get-ITGlueFlexibleAssetFields -flexible_asset_type_id $FilterID.id).data
 $FAModelFieldID = ($Firewall_FAFields | Where-Object { $_.attributes.name -like "Model" }).id
 $FAModelOptions = ($Firewall_FAFields | Where-Object { $_.attributes.name -like "Model" }).attributes."default-value" -split "\n"
+
+if (!$Firewall_FAFields) {
+	Write-Error "Could not get ITG Firewall fields"
+	exit 1
+}
 
 function Add-FAModelField($Model) {
 	if ($Global:FAModelFieldID -and $Global:FAModelOptions) {
@@ -940,8 +945,18 @@ foreach ($Match in $AllMatches) {
 
 			# See if we can find any related configuration, if not, create a new one
 			$RelatedConfigurations = Get-ITGlueConfigurations -organization_id $Match.itgId -filter_serial_number $Firewall.serialNumber
+			if (!$RelatedConfigurations -or $RelatedConfigurations.Error) {
+				Write-Error "An error occurred trying to get the related configuration from ITG. Exiting..."
+				Write-Error $RelatedConfigurations.Error
+				exit 1
+			}
 			if (!$RelatedConfigurations -or !$RelatedConfigurations.data) {
 				$RelatedConfigurations = Get-ITGlueConfigurations -organization_id $Match.itgId -filter_name $Firewall.hostname
+				if (!$RelatedConfigurations -or $RelatedConfigurations.Error) {
+					Write-Error "An error occurred trying to get the related configuration from ITG. Exiting..."
+					Write-Error $RelatedConfigurations.Error
+					exit 1
+				}
 			}
 			$RelatedConfigurations = $RelatedConfigurations.data
 

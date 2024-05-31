@@ -40,6 +40,8 @@ Write-Host "Configured the ITGlue API"
 
 # Get the flexible asset type id
 $FilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $FlexAssetName).data
+$ApplicationsAssetID = (Get-ITGlueFlexibleAssetTypes -filter_name "Applications").data
+$AD_FilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $AD_FlexAssetName).data
 
 # Verify we can connect to the ITG API (if we can't this can cause duplicates)
 $OrganizationInfo = Get-ITGlueOrganizations -id $OrgID
@@ -68,7 +70,20 @@ Write-Host "Downloading existing groups"
 $ExistingGroups = @()
 $i = 1
 while ($i -le 10 -and ($ExistingGroups | Measure-Object).Count -eq (($i-1) * 200)) {
-	$ExistingGroups += (Get-ITGlueFlexibleAssets -page_size 200 -page_number $i -filter_flexible_asset_type_id $Filterid.id -filter_organization_id $orgID).data
+	$ExistingGroups_Partial = Get-ITGlueFlexibleAssets -page_size 200 -page_number $i -filter_flexible_asset_type_id $Filterid.id -filter_organization_id $orgID
+	if (!$ExistingGroups_Partial -or $ExistingGroups_Partial.Error) {
+		# We got an error querying groups, wait and try again
+		Start-Sleep -Seconds 2
+		$ExistingGroups_Partial = Get-ITGlueFlexibleAssets -page_size 200 -page_number $i -filter_flexible_asset_type_id $Filterid.id -filter_organization_id $orgID
+
+		if (!$ExistingGroups_Partial -or $ExistingGroups_Partial.Error) {
+			Write-Error "An error occurred trying to get the existing AD groups from ITG. Exiting..."
+			Write-Error $ExistingGroups_Partial.Error
+			exit 1
+		}
+	}
+	$ExistingGroups += ($ExistingGroups_Partial).data
+
 	Write-Host "- Got group set $i"
 	$TotalGroups = ($ExistingGroups | Measure-Object).Count
 	Write-Host "- Total: $TotalGroups"
@@ -111,7 +126,6 @@ $Dictionary = @($Dictionary.Values.Word)
 
 # Get application names from ITG, for finding application-related groups
 Write-Host "Downloading applications list"
-$ApplicationsAssetID = (Get-ITGlueFlexibleAssetTypes -filter_name "Applications").data
 $Applications = (Get-ITGlueFlexibleAssets -page_size 1000 -filter_flexible_asset_type_id $ApplicationsAssetID.id -filter_organization_id $orgID).data
 $Applications = $Applications.attributes.traits.name
 $ApplicationWords = $Applications | ForEach-Object { $_.split(" _-") } | Where-Object { $_ -notin $Dictionary -and $_.substring(0,$_.length-1) -notin $Dictionary -and $_.substring(0,$_.length-2) -notin $Dictionary }
@@ -131,7 +145,6 @@ $FullConfigurationsList = $FullConfigurationsList.data
 # Get AD site details
 $ForestInformation = $(Get-ADForest)
 $ADSiteName = $ForestInformation.Name
-$AD_FilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $AD_FlexAssetName).data
 $ADFlexAsset = (Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $AD_FilterID.id -filter_organization_id $OrgID).data | Where-Object { $_.attributes.traits.'ad-full-name' -eq $ADSiteName }
 if (($ADFlexAsset | Measure-Object).Count -gt 1) {
 	$ADFlexAsset = $ADFlexAsset | Sort-Object -Property {$_.attributes.'updated-at'} -Descending | Select-Object -First 1

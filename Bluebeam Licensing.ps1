@@ -74,8 +74,13 @@ if (!$OrganizationInfo -or !$OrganizationInfo.data -or !$FilterID -or ($Organiza
 
 # Get all of the Bluebeam license in ITG
 Write-Host "Downloading licenses"
-$ExistingLicenses = (Get-ITGlueFlexibleAssets -page_size 1000 -filter_flexible_asset_type_id $FilterID.id -filter_organization_id $orgID).data
-$ExistingLicenses = $ExistingLicenses | Where-Object { $_.attributes.name -like "*Revu*" -or $_.attributes.name -like "*Bluebeam*" }
+$ExistingLicenses = Get-ITGlueFlexibleAssets -page_size 1000 -filter_flexible_asset_type_id $FilterID.id -filter_organization_id $orgID
+if (!$ExistingLicenses -or $ExistingLicenses.Error) {
+    Write-Error "An error occurred trying to get the existing licenses from ITG. Exiting..."
+	Write-Error $ExistingLicenses.Error
+	exit 1
+}
+$ExistingLicenses = ($ExistingLicenses).data | Where-Object { $_.attributes.name -like "*Revu*" -or $_.attributes.name -like "*Bluebeam*" }
 $LicenseCount = ($ExistingLicenses | Measure-Object).Count
 
 # Get full configurations list from ITG (it's faster than searching for computers on a per api call basis)

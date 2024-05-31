@@ -423,8 +423,13 @@ foreach ($OrgLicensing in $LicenseInfo) {
 	# If we haven't already, get any existing Meraki licenses for this company from ITG
 	if (($OrgExistingLicenses | Where-Object { $_.itgId -eq $Organization.itgId } | Measure-Object).Count -eq 0) {
 		Write-Output "Downloading existing Meraki licenses for: $($Organization.itgName)"
-		$ExistingLicenses = (Get-ITGlueFlexibleAssets -page_size 1000 -filter_flexible_asset_type_id $FilterID.id -filter_organization_id $Organization.itgId).data
-		$ExistingLicenses = $ExistingLicenses | Where-Object { $_.attributes.name -like "*Meraki*" }
+		$ExistingLicenses = Get-ITGlueFlexibleAssets -page_size 1000 -filter_flexible_asset_type_id $FilterID.id -filter_organization_id $Organization.itgId
+		if (!$ExistingLicenses -or $ExistingLicenses.Error) {
+			Write-Error "An error occurred trying to get the existing licenses from ITG. Exiting..."
+			Write-Error $ExistingLicenses.Error
+			exit 1
+		}
+		$ExistingLicenses = ($ExistingLicenses).data | Where-Object { $_.attributes.name -like "*Meraki*" }
 		$OrgExistingLicenses += @{
 			itgId = $Organization.itgId
 			licenses = $ExistingLicenses
@@ -545,7 +550,13 @@ foreach ($OrgLicensing in $LicenseInfo) {
 			$MissingDevices = $OrgLicensing.devices.name | Where-Object {!($AssignedDevices.attributes.name -contains $_)}
 
 			if ($MissingDevices -and !$ITGMerakiModels) {
-				$ITGMerakiModels = (Get-ITGlueModels -manufacturer_id $MerakiManufacturerID -page_size 1000).data
+				$ITGMerakiModels = Get-ITGlueModels -manufacturer_id $MerakiManufacturerID -page_size 1000
+				if (!$ITGMerakiModels -or $ITGMerakiModels.Error) {
+					Write-Error "An error occurred trying to get the existing meraki models from ITG. Exiting..."
+					Write-Error $ITGMerakiModels.Error
+					exit 1
+				}
+				$ITGMerakiModels = ($ITGMerakiModels).data
 			}
 
 			foreach ($MissingDeviceName in $MissingDevices) {

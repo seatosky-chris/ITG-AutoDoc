@@ -300,7 +300,13 @@ if (!$OrganizationInfo -or !$OrganizationInfo.data -or !$FilterID -or ($Organiza
 }
   
 # Get the current Security asset, if one exists.
-$ExistingFlexAssets = (Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $Filterid.id -filter_organization_id $orgID).data
+$ExistingFlexAssets = Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $Filterid.id -filter_organization_id $orgID
+if (!$ExistingFlexAssets -or $ExistingFlexAssets.Error) {
+    Write-Error "An error occurred trying to get the existing flex asset from ITG. Exiting..."
+	Write-Error $ExistingFlexAssets.Error
+	exit 1
+}
+$ExistingFlexAssets = ($ExistingFlexAssets).data
 if (($ExistingFlexAssets | Measure-Object).Count -gt 1) {
 	$ExistingFlexAssets = $ExistingFlexAssets | Where-Object { !$_.attributes.archived }
 }

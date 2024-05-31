@@ -67,6 +67,7 @@ if ($O365UnattendedLogin -and $O365UnattendedLogin.AppId) {
 
 # Get the flexible asset type ids
 $FilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $FlexAssetName).data
+$Email_FilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $Email_FlexAssetName).data
 if ($ADGroupsFlexAssetName) {
 	$ADGroupsFilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $ADGroupsFlexAssetName).data
 }
@@ -103,7 +104,20 @@ Write-Host "Downloading existing email groups"
 $ExistingGroups = @()
 $i = 1
 while ($i -le 10 -and ($ExistingGroups | Measure-Object).Count -eq (($i-1) * 200)) {
-	$ExistingGroups += (Get-ITGlueFlexibleAssets -page_size 200 -page_number $i -filter_flexible_asset_type_id $Filterid.id -filter_organization_id $orgID).data
+	$ExistingGroups_Partial = Get-ITGlueFlexibleAssets -page_size 200 -page_number $i -filter_flexible_asset_type_id $Filterid.id -filter_organization_id $orgID
+	if (!$ExistingGroups_Partial -or $ExistingGroups_Partial.Error) {
+		# We got an error querying groups, wait and try again
+		Start-Sleep -Seconds 2
+		$ExistingGroups_Partial = Get-ITGlueFlexibleAssets -page_size 200 -page_number $i -filter_flexible_asset_type_id $Filterid.id -filter_organization_id $orgID
+
+		if (!$ExistingGroups_Partial -or $ExistingGroups_Partial.Error) {
+			Write-Error "An error occurred trying to get the existing O365 groups from ITG. Exiting..."
+			Write-Error $ExistingGroups_Partial.Error
+			exit 1
+		}
+	}
+	$ExistingGroups += ($ExistingGroups_Partial).data
+
 	Write-Host "- Got group set $i"
 	$TotalGroups = ($ExistingGroups | Measure-Object).Count
 	Write-Host "- Total: $TotalGroups"
@@ -147,7 +161,6 @@ if ($ADGroupsFilterID) {
 # Get O365 tenant info
 $TenantDetails = Get-AzureADTenantDetail
 $DefaultDomain = ($TenantDetails.VerifiedDomains | Where-Object { $_._Default }).Name
-$Email_FilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $Email_FlexAssetName).data
 $O365TenantFlexAsset = (Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $Email_FilterID.id -filter_organization_id $orgID).data | Where-Object { $_.attributes.traits.'type' -eq "Office 365" -and $_.attributes.traits.'default-domain' -eq $DefaultDomain }
 if (($O365TenantFlexAsset | Measure-Object).Count -gt 1) {
 	$O365TenantFlexAsset = $O365TenantFlexAsset | Sort-Object -Property {$_.attributes.'updated-at'} -Descending | Select-Object -First 1

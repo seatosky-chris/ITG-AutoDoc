@@ -45,7 +45,13 @@ if (!$OrganizationInfo -or !$OrganizationInfo.data -or !$FilterID -or ($Organiza
 
 # Get existing shares
 Write-Host "Downloading existing shares"
-$ExistingShares = (Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $Filterid.id -filter_organization_id $orgID -page_size 1000).data
+$ExistingShares = Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $Filterid.id -filter_organization_id $orgID -page_size 1000
+if (!$ExistingShares -or $ExistingShares.Error) {
+    Write-Error "An error occurred trying to get the existing file shares from ITG. Exiting..."
+	Write-Error $ExistingShares.Error
+	exit 1
+}
+$ExistingShares = $ExistingShares.data
 $TotalShares = ($ExistingShares | Measure-Object).Count
 Write-Host "Downloaded $TotalShares shares"
 

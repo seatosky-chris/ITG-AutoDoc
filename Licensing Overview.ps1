@@ -50,8 +50,13 @@ if (!$OrganizationInfo -or !$OrganizationInfo.data -or !$FilterID -or ($Organiza
 
 # Get all of the licenses in ITG matching $LicenseNames
 Write-Host "Downloading licenses"
-$ExistingLicenses = (Get-ITGlueFlexibleAssets -page_size 1000 -filter_flexible_asset_type_id $FilterID.id -filter_organization_id $orgID).data
-$ExistingLicenses = $ExistingLicenses | Where-Object {$License = $_; (($LicenseNames | Where-Object { $License.attributes.traits.name -like $_  }) | Measure-Object).Count -gt 0 }
+$ExistingLicenses = Get-ITGlueFlexibleAssets -page_size 1000 -filter_flexible_asset_type_id $FilterID.id -filter_organization_id $orgID
+if (!$ExistingLicenses -or $ExistingLicenses.Error) {
+    Write-Error "An error occurred trying to get the existing licenses from ITG. Exiting..."
+	Write-Error $ExistingLicenses.Error
+	exit 1
+}
+$ExistingLicenses = ($ExistingLicenses).data | Where-Object {$License = $_; (($LicenseNames | Where-Object { $License.attributes.traits.name -like $_  }) | Measure-Object).Count -gt 0 }
 $LicenseCount = ($ExistingLicenses | Measure-Object).Count
 
 # Get the locations (for the license overview)
@@ -285,7 +290,13 @@ if ($OverviewDocumentName -and $LicenseOverview) {
 
 	# Get the overview documents ID if it exists
 	$FilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $OverviewFlexAssetName).data
-	$ExistingOverview = (Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $FilterID.id -filter_organization_id $orgID -filter_name $OverviewDocumentName).data
+	$ExistingOverview = Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $FilterID.id -filter_organization_id $orgID -filter_name $OverviewDocumentName
+	if (!$ExistingOverview -or $ExistingOverview.Error) {
+		Write-Error "An error occurred trying to get the existing overview from ITG. Exiting..."
+		Write-Error $ExistingOverview.Error
+		exit 1
+	}
+	$ExistingOverview = ($ExistingOverview).data
 
 	$ApplicationIDs = $ExistingLicenses.attributes.traits.application.values.id | Select-Object -Unique
 

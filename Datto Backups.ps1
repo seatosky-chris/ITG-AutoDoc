@@ -820,8 +820,13 @@ foreach ($BDRDevice in $BDRDevices.items) {
 	}
 
 	write-host "Documenting $($BDRDevice.name) to IT-Glue"  -ForegroundColor Green
-	$ExistingFlexAssets = (Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $($FilterID.ID) -filter_organization_id $OrgID).data
-	$ExistingFlexAsset = $ExistingFlexAssets | Where-Object { $_.attributes.traits.'backup-solution-name' -eq $BDRDevice.name -and $_.attributes.traits.'serial' -eq $BDRDevice.serialNumber  }
+	$ExistingFlexAssets = Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $($FilterID.ID) -filter_organization_id $OrgID
+	if (!$ExistingFlexAssets -or $ExistingFlexAssets.Error) {
+		Write-Error "An error occurred trying to get the existing flex asset from ITG. Exiting..."
+		Write-Error $ExistingFlexAssets.Error
+		exit 1
+	}
+	$ExistingFlexAsset = ($ExistingFlexAssets).data | Where-Object { $_.attributes.traits.'backup-solution-name' -eq $BDRDevice.name -and $_.attributes.traits.'serial' -eq $BDRDevice.serialNumber  }
 
 	#If the Asset does not exist, we edit the body to be in the form of a new asset, if not, we just upload.
 	if (!$ExistingFlexAsset) {

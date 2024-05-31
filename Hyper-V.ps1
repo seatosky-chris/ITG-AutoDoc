@@ -42,11 +42,11 @@ Add-ITGlueBaseURI -base_uri $APIEndpoint
 Add-ITGlueAPIKey $APIKEy
 
 $FilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $FlexAssetName).data
-$Cluster_FilterID  = (Get-ITGlueFlexibleAssetTypes -filter_name $Cluster_FlexAssetName).data
+$Cluster_FilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $Cluster_FlexAssetName).data
 
 # Verify we can connect to the ITG API (if we can't this can cause duplicates)
 $OrganizationInfo = Get-ITGlueOrganizations -id $orgID
-if (!$OrganizationInfo -or !$OrganizationInfo.data -or !$FilterID -or ($OrganizationInfo.data | Measure-Object).Count -lt 1 -or !$OrganizationInfo.data[0].attributes -or !$OrganizationInfo.data[0].attributes."short-name") {
+if (!$OrganizationInfo -or !$OrganizationInfo.data -or !$FilterID -or !$Cluster_FilterID -or ($OrganizationInfo.data | Measure-Object).Count -lt 1 -or !$OrganizationInfo.data[0].attributes -or !$OrganizationInfo.data[0].attributes."short-name") {
 	Write-Error "Could not connect to the IT Glue API. Exiting..."
 	exit 1
 } else {
@@ -260,8 +260,13 @@ $FlexAssetBody =
 }
  
 write-host "Documenting to IT-Glue"  -ForegroundColor Green
-$ExistingFlexAssets = (Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $($filterID.ID) -filter_organization_id $OrgID).data
-$ExistingFlexAsset = $ExistingFlexAssets | Where-Object { $_.attributes.traits.'host-name' -eq $ENV:computername }
+$ExistingFlexAssets = Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $($filterID.ID) -filter_organization_id $OrgID
+if (!$ExistingFlexAssets -or $ExistingFlexAssets.Error) {
+    Write-Error "An error occurred trying to get the existing flex assets from ITG. Exiting..."
+    Write-Error $ExistingFlexAssets.Error
+	exit 1
+}
+$ExistingFlexAsset = ($ExistingFlexAssets).data | Where-Object { $_.attributes.traits.'host-name' -eq $ENV:computername }
 
 #If the Asset does not exist, we edit the body to be in the form of a new asset, if not, we just upload.
 if (!$ExistingFlexAsset) {
@@ -301,10 +306,17 @@ if ($LastUpdatedUpdater_APIURL -and $OrgID) {
 ############
 # Lets also update the primary virtualizations page if one exists that is related to this Host or Cluster
 ############
+$ExistingClusterFlexAsset = Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $($Cluster_FilterID.ID) -filter_organization_id $OrgID
+if (!$ExistingClusterFlexAsset -or $ExistingClusterFlexAsset.Error) {
+    Write-Error "An error occurred trying to get the existing virtualization flex asset from ITG. Exiting..."
+    Write-Error $ExistingClusterFlexAsset.Error
+	exit 1
+}
+
 if ($ClusterName) {
-    $ExistingClusterFlexAsset = (Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $($Cluster_FilterID.ID) -filter_organization_id $OrgID).data | Where-Object { $_.attributes.traits.'virtualization-friendly-name' -like "*$($ClusterName.Name)*" -or $_.attributes.traits.'virtualization-friendly-name' -like "*$($ENV:computername)*" }
+    $ExistingClusterFlexAsset = $ExistingClusterFlexAsset.data | Where-Object { $_.attributes.traits.'virtualization-friendly-name' -like "*$($ClusterName.Name)*" -or $_.attributes.traits.'virtualization-friendly-name' -like "*$($ENV:computername)*" }
 } else {
-    $ExistingClusterFlexAsset = (Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $($Cluster_FilterID.ID) -filter_organization_id $OrgID).data | Where-Object { $_.attributes.traits.'virtualization-friendly-name' -like "*$($ENV:computername)*" }
+    $ExistingClusterFlexAsset = $ExistingClusterFlexAsset.data | Where-Object { $_.attributes.traits.'virtualization-friendly-name' -like "*$($ENV:computername)*" }
 }
 
 foreach ($ExistingAsset in $ExistingClusterFlexAsset) {

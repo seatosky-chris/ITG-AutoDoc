@@ -20,7 +20,7 @@ $IgnoreLocalGroups = $true # If true, it will ignore permissions of local groups
 ####################################################################
 
 # Ensure they are using the latest TLS version
-$CurrentTLS = [SystemNet.ServicePointManager]::SecurityProtocol
+$CurrentTLS = [System.Net.ServicePointManager]::SecurityProtocol
 if ($CurrentTLS -notlike "*Tls12" -and $CurrentTLS -notlike "*Tls13") {
 	[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 	Write-Host "This device is using an old version of TLS. Temporarily changed to use TLS v1.2."
@@ -61,7 +61,13 @@ if (!$OrganizationInfo -or !$OrganizationInfo.data -or !$FilterID -or ($Organiza
 
 # Get existing shares
 Write-Host "Downloading existing shares"
-$ExistingShares = (Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $Filterid.id -filter_organization_id $orgID -page_size 1000).data
+$ExistingShares = Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $Filterid.id -filter_organization_id $orgID -page_size 1000
+if (!$ExistingShares -or $ExistingShares.Error) {
+    Write-Error "An error occurred trying to get the existing file shares from ITG. Exiting..."
+	Write-Error $ExistingShares.Error
+	exit 1
+}
+$ExistingShares = $ExistingShares.data
 $TotalShares = ($ExistingShares | Measure-Object).Count
 Write-Host "Downloaded $TotalShares shares"
 

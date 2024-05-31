@@ -456,7 +456,13 @@ $PhysicalConfig = if ($AtAGlanceHash.'Dell server' -eq $true) {
 }
   
 # Upload data to IT-Glue. We try to match the Server name to current computer name.
-$ExistingFlexAsset = (Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $Filterid.id -filter_organization_id $orgID).data | Where-Object { $_.attributes.traits.'ad-full-name' -eq $RawAD.ForestName }
+$ExistingFlexAsset = Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $Filterid.id -filter_organization_id $orgID
+if (!$ExistingFlexAsset -or $ExistingFlexAsset.Error) {
+    Write-Error "An error occurred trying to get the existing flex asset from ITG. Exiting..."
+    Write-Error $ExistingFlexAsset.Error
+	exit 1
+}
+$ExistingFlexAsset = ($ExistingFlexAsset).data | Where-Object { $_.attributes.traits.'ad-full-name' -eq $RawAD.ForestName }
 if (($ExistingFlexAsset | Measure-Object).Count -gt 1) {
 	$ExistingFlexAsset = $ExistingFlexAsset | Sort-Object -Property {$_.attributes.'updated-at'} -Descending | Select-Object -First 1
 }

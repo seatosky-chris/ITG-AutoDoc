@@ -4,7 +4,7 @@
 # Created Date: Friday, September 29th 2023, 4:58:10 pm
 # Author: Chris Jantzen
 # -----
-# Last Modified: Tue May 21 2024
+# Last Modified: Mon May 27 2024
 # Modified By: Chris Jantzen
 # -----
 # Copyright (c) 2023 Sea to Sky Network Solutions
@@ -134,10 +134,11 @@ $LicenseFilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $LicenseFlexAssetN
 $BackupFilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $BackupFlexAssetName).data
 $ADGroupsFilterID = (Get-ITGlueFlexibleAssetTypes -filter_name $ADGroupsFlexAssetName).data
 $CustomOverview_FlexAssetID = (Get-ITGlueFlexibleAssetTypes -filter_name $CustomOverviewFlexAssetName).data[0].id
+$BillingFilterID = (Get-ITGlueFlexibleAssetTypes -filter_name "Customer Billing").data
 
 # Verify we can connect to the ITG API (if we can't this can cause duplicates)
 $OrganizationInfo = Get-ITGlueOrganizations -id $orgID
-if (!$OrganizationInfo -or !$OrganizationInfo.data -or !$FilterID -or ($OrganizationInfo.data | Measure-Object).Count -lt 1 -or !$OrganizationInfo.data[0].attributes -or !$OrganizationInfo.data[0].attributes."short-name") {
+if (!$OrganizationInfo -or !$OrganizationInfo.data -or !$FilterID -or !$CustomOverview_FlexAssetID -or ($OrganizationInfo.data | Measure-Object).Count -lt 1 -or !$OrganizationInfo.data[0].attributes -or !$OrganizationInfo.data[0].attributes."short-name") {
 	Write-Error "Could not connect to the IT Glue API. Exiting..."
 	exit 1
 } else {
@@ -154,7 +155,13 @@ $AllUsers = Get-AzureADUser -All $true
 $AllUserMailboxes = Get-Mailbox -RecipientTypeDetails UserMailbox -ResultSize unlimited
 
 # Get the existing asset if one exists
-$ExistingFlexAssets = (Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $filterID.id -filter_organization_id $OrgID).data | Where-Object { $_.attributes.traits.'type' -eq "Office 365" }
+$ExistingFlexAssets = Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $filterID.id -filter_organization_id $OrgID
+if (!$ExistingFlexAssets -or $ExistingFlexAssets.Error) {
+    Write-Error "An error occurred trying to get the existing flex asset from ITG. Exiting..."
+	Write-Error $ExistingFlexAssets.Error
+	exit 1
+}
+$ExistingFlexAssets = ($ExistingFlexAssets).data | Where-Object { $_.attributes.traits.'type' -eq "Office 365" }
 
 # Do a quick check to see if this O365 has been decommed, if so, exit
 $ExistingFlexAsset = $ExistingFlexAssets | Where-Object { $_.attributes.traits.'azure-tenant-id' -eq $O365UnattendedLogin.TenantID }
@@ -675,8 +682,13 @@ if ($LicenseFlexAssetName -and $LicenseFilterID -and $LicenseFilterID.id) {
 		} 
 	}
 
-	$ITGLicenses = (Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $LicenseFilterID.id -filter_organization_id $OrgID -page_size 1000).data
-	$ITGLicenses = $ITGLicenses | Where-Object { $_.attributes.name -like "Office 365 - User Licenses*" }
+	$ITGLicenses = Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $LicenseFilterID.id -filter_organization_id $OrgID -page_size 1000
+	if (!$ITGLicenses -or $ITGLicenses.Error) {
+		Write-Error "An error occurred trying to get the existing licenses from ITG. Exiting..."
+		Write-Error $ITGLicenses.Error
+		exit 1
+	}
+	$ITGLicenses = ($ITGLicenses).data | Where-Object { $_.attributes.name -like "Office 365 - User Licenses*" }
 	if ($ITGLicenses -and ($ITGLicenses | Measure-Object).Count -gt 1) {
 		$ITGLicenses = $ITGLicenses | Where-Object { $_.attributes.traits.'additional-notes' -like "*$($O365UnattendedLogin.TenantID)*" }
 	}
@@ -930,6 +942,11 @@ if ($UpdateO365Report -and $O365LicenseTypes) {
 	$LicenseList_FlexAssetBody.attributes.traits.overview += $LicenseListHTML
 
 	$ExistingLicenseOverview = Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $CustomOverview_FlexAssetID -filter_organization_id $orgID -include attachments
+	if (!$ExistingLicenseOverview -or $ExistingLicenseOverview.Error) {
+		Write-Error "An error occurred trying to get the existing license overview from ITG. Exiting..."
+		Write-Error $ExistingLicenseOverview.Error
+		exit 1
+	}
 	if (($ExistingLicenseOverview.data | Where-Object { $_.attributes.traits.name -eq "Office 365 License Overview - $($TenantDetails.DisplayName)" } | Measure-Object).Count -gt 0) {
 		$ExistingLicenseOverview.data = $ExistingLicenseOverview.data | Where-Object { $_.attributes.traits.name -eq "Office 365 License Overview - $($TenantDetails.DisplayName)" }  | Select-Object -First 1
 	} elseif (($ExistingLicenseOverview.data | Where-Object { $_.attributes.traits.name -eq "Office 365 License Overview" } | Measure-Object).Count -gt 0) {
@@ -939,6 +956,11 @@ if ($UpdateO365Report -and $O365LicenseTypes) {
 	}
 	if ($ExistingLicenseOverview.data -and $ExistingLicenseOverview.data.id) {
 		$ExistingLicenseOverview = Get-ITGlueFlexibleAssets -id $ExistingLicenseOverview.data.id -include attachments
+		if (!$ExistingLicenseOverview -or $ExistingLicenseOverview.Error) {
+			Write-Error "An error occurred trying to get the existing license overview from ITG. Exiting..."
+			Write-Error $ExistingLicenseOverview.Error
+			exit 1
+		}
 	}
 
 	if (!$ExistingLicenseOverview.data) {
@@ -960,18 +982,24 @@ if ($UpdateO365Report -and $O365LicenseTypes) {
 		}
 
 		# and customer billing page too if it exists
-		$BillingFilterID = (Get-ITGlueFlexibleAssetTypes -filter_name "Customer Billing").data
-		$BillingOverview = Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $BillingFilterID.id -filter_organization_id $orgID
-		$BillingOverview.data = $BillingOverview.data | Where-Object { $_.attributes.name -eq "Customer Billing" }  | Select-Object -First 1
-		if ($BillingOverview) {
-			$RelatedItems = @{
-				type = 'related_items'
-				attributes = @{
-					destination_id = $BillingOverview.data.id
-					destination_type = "Flexible Asset"
-				}
+		if ($BillingFilterID -and $BillingFilterID.id) {
+			$BillingOverview = Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $BillingFilterID.id -filter_organization_id $orgID
+			if (!$BillingOverview -or $BillingOverview.Error) {
+				Write-Error "An error occurred trying to get the existing billing overview from ITG. Exiting..."
+				Write-Error $BillingOverview.Error
+				exit 1
 			}
-			New-ITGlueRelatedItems -resource_type flexible_assets -resource_id $ExistingLicenseOverview.data.id -data $RelatedItems | Out-Null
+			$BillingOverview.data = $BillingOverview.data | Where-Object { $_.attributes.name -eq "Customer Billing" }  | Select-Object -First 1
+			if ($BillingOverview) {
+				$RelatedItems = @{
+					type = 'related_items'
+					attributes = @{
+						destination_id = $BillingOverview.data.id
+						destination_type = "Flexible Asset"
+					}
+				}
+				New-ITGlueRelatedItems -resource_type flexible_assets -resource_id $ExistingLicenseOverview.data.id -data $RelatedItems | Out-Null
+			}
 		}
 	} else {
 		Set-ITGlueFlexibleAssets -id $ExistingLicenseOverview.data.id -data $LicenseList_FlexAssetBody | Out-Null
