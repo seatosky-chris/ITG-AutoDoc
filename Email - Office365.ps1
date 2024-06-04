@@ -4,7 +4,7 @@
 # Created Date: Friday, September 29th 2023, 4:58:10 pm
 # Author: Chris Jantzen
 # -----
-# Last Modified: Mon May 27 2024
+# Last Modified: Tue Jun 04 2024
 # Modified By: Chris Jantzen
 # -----
 # Copyright (c) 2023 Sea to Sky Network Solutions
@@ -14,6 +14,7 @@
 # HISTORY:
 # Date      	By	Comments
 # ----------	---	----------------------------------------------------------
+# 2024-06-04	CJ	Fixing office 365 overview not including license info due to special characters being appended to the start of the licensing translation csv.
 ###
 
 ################# IT-Glue Information ######################################
@@ -666,7 +667,9 @@ $LicenseAsset = $false
 $LinkLicenseAsset = $false
 if ($LicenseFlexAssetName -and $LicenseFilterID -and $LicenseFilterID.id) {
 	$AllLicenses = Get-MgSubscribedSku
-	$LicenseTranslationTable = Invoke-RestMethod -Method Get -Uri "https://download.microsoft.com/download/e/3/e/e3e9faf2-f28b-490a-9ada-c6089a1fc5b0/Product%20names%20and%20service%20plan%20identifiers%20for%20licensing.csv" | ConvertFrom-Csv
+	New-Item -ItemType Directory -Force -Path "C:\Temp" | Out-Null
+	Invoke-WebRequest -Uri "https://download.microsoft.com/download/e/3/e/e3e9faf2-f28b-490a-9ada-c6089a1fc5b0/Product%20names%20and%20service%20plan%20identifiers%20for%20licensing.csv" -OutFile "C:\Temp\O365LicenseTranslationTable.csv"
+	$LicenseTranslationTable = Import-CSV -Path "C:\Temp\O365LicenseTranslationTable.csv"
 
 	$LicensesCleaned = foreach ($License in $AllLicenses) {
 		if (($License.prepaidUnits.enabled - $License.prepaidUnits.suspended) -eq 0) {
@@ -888,10 +891,12 @@ if ($LinkLicenseAsset -and $LicenseAsset -and $LicenseAsset.data.id -and $Existi
 
 # Record an office 365 overview
 $UserO365ReportUpdated = $false
-if ($UpdateO365Report -and $O365LicenseTypes) {
+if ($UpdateO365Report -and $O365LicenseTypes_Primary) {
 	Write-Host "Exporting Office 365 license report..."
 	if (!$LicenseTranslationTable) {
-		$LicenseTranslationTable = Invoke-RestMethod -Method Get -Uri "https://download.microsoft.com/download/e/3/e/e3e9faf2-f28b-490a-9ada-c6089a1fc5b0/Product%20names%20and%20service%20plan%20identifiers%20for%20licensing.csv" | ConvertFrom-Csv
+		New-Item -ItemType Directory -Force -Path "C:\Temp" | Out-Null
+		Invoke-WebRequest -Uri "https://download.microsoft.com/download/e/3/e/e3e9faf2-f28b-490a-9ada-c6089a1fc5b0/Product%20names%20and%20service%20plan%20identifiers%20for%20licensing.csv" -OutFile "C:\Temp\O365LicenseTranslationTable.csv"
+		$LicenseTranslationTable = Import-CSV -Path "C:\Temp\O365LicenseTranslationTable.csv"
 	}
 
 	$LicenseList = @()
