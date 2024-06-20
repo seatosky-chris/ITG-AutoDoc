@@ -4,7 +4,7 @@
 # Created Date: Friday, September 29th 2023, 4:58:10 pm
 # Author: Chris Jantzen
 # -----
-# Last Modified: Tue Jun 04 2024
+# Last Modified: Thu Jun 20 2024
 # Modified By: Chris Jantzen
 # -----
 # Copyright (c) 2023 Sea to Sky Network Solutions
@@ -100,18 +100,6 @@ if ($O365UnattendedLogin -and $O365UnattendedLogin.AppId) {
 	Connect-AzureAD -AccountID $O365LoginUser
 }
 
-If (Get-Module -ListAvailable -Name "ExchangeOnlineManagement") {
-	Import-Module ExchangeOnlineManagement
-} else {
-	Install-Module PowerShellGet -Force
-	Install-Module -Name ExchangeOnlineManagement
-}
-if ($O365UnattendedLogin -and $O365UnattendedLogin.AppId) {
-	Connect-ExchangeOnline -CertificateThumbprint $O365UnattendedLogin.CertificateThumbprint -AppID $O365UnattendedLogin.AppID -Organization $O365UnattendedLogin.Organization -ShowProgress $true -ShowBanner:$false
-} else {
-	Connect-ExchangeOnline -UserPrincipalName $O365LoginUser -ShowProgress $true -ShowBanner:$false
-}
-
 $GraphModules = (Get-Module -ListAvailable).Name | Where-Object { $_ -like "Microsoft.Graph*" }
 If ("Microsoft.Graph" -in $GraphModules -or ("Microsoft.Graph.Users" -in $GraphModules -and "Microsoft.Graph.Identity.SignIns" -in $GraphModules -and "Microsoft.Graph.Identity.DirectoryManagement" -in $GraphModules)) {
 	Import-Module Microsoft.Graph.Users
@@ -127,6 +115,18 @@ if ($O365UnattendedLogin -and $O365UnattendedLogin.AppId) {
 	Connect-MgGraph -CertificateThumbprint $O365UnattendedLogin.CertificateThumbprint -ClientID $O365UnattendedLogin.AppID -TenantId $O365UnattendedLogin.TenantId -NoWelcome
 } else {
 	Connect-MgGraph
+}
+
+If (Get-Module -ListAvailable -Name "ExchangeOnlineManagement") {
+	Import-Module ExchangeOnlineManagement
+} else {
+	Install-Module PowerShellGet -Force
+	Install-Module -Name ExchangeOnlineManagement -MaximumVersion 3.4.0
+}
+if ($O365UnattendedLogin -and $O365UnattendedLogin.AppId) {
+	Connect-ExchangeOnline -CertificateThumbprint $O365UnattendedLogin.CertificateThumbprint -AppID $O365UnattendedLogin.AppID -Organization $O365UnattendedLogin.Organization -ShowProgress $true -ShowBanner:$false
+} else {
+	Connect-ExchangeOnline -UserPrincipalName $O365LoginUser -ShowProgress $true -ShowBanner:$false
 }
 
 # Get the flexible asset type ids

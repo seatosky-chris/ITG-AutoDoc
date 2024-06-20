@@ -57,7 +57,7 @@ If (Get-Module -ListAvailable -Name "ExchangeOnlineManagement") {
 	Import-Module ExchangeOnlineManagement
 } else {
 	Install-Module PowerShellGet -Force
-	Install-Module -Name ExchangeOnlineManagement
+	Install-Module -Name ExchangeOnlineManagement -MaximumVersion 3.4.0
 }
 if ($O365UnattendedLogin -and $O365UnattendedLogin.AppId) {
 	Connect-ExchangeOnline -CertificateThumbprint $O365UnattendedLogin.CertificateThumbprint -AppID $O365UnattendedLogin.AppID -Organization $O365UnattendedLogin.Organization -ShowProgress $true -ShowBanner:$false
