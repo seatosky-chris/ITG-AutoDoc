@@ -179,9 +179,10 @@ if ($IsCluster) {
     $ClusterName = Get-Cluster;
     $ClusterDetails = Get-ClusterNode;
 }
+$HyperVFeatureDetails = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V
 
 $AtAGlanceHash = [ordered]@{
-    'Hyper-V Server'   = if ((Get-WindowsOptionalFeature -FeatureName *hyper-v* -Online).state -eq 'enabled') { $true } else { $False }
+    'Hyper-V Server'   = if (($HyperVFeatureDetails).state -eq 'enabled') { $true } else { $False }
     'Hyper-V Replicas' = if ($ReplicationSettings -notlike "Replication not setup*") { $true } else { $False }
     'Hyper-V Cluster'  = if ($IsCluster) { $true } else { $false }
     'Dell Server'      = if ($ServerDetails.Manufacturer -like '*Dell*') { $true } else { $false }
@@ -365,7 +366,7 @@ foreach ($ExistingAsset in $ExistingClusterFlexAsset) {
 		$ClusterReplication = Get-VMReplication -ComputerName (Get-ClusterNode) -ErrorAction SilentlyContinue
 
 		$ClusterAtAGlanceHash = [ordered]@{
-			'Hyper-V Server'   = if ((Get-WindowsOptionalFeature -FeatureName *hyper-v* -Online).state -eq 'enabled') { $true } else { $False }
+			'Hyper-V Server'   = if (($HyperVFeatureDetails).state -eq 'enabled') { $true } else { $False }
 			'Hyper-V Replicas' = if ($ClusterReplication) { $true } else { $False }
 			'Hyper-V Cluster'  = if ($IsCluster) { $true } else { $false }
 			'Host Details'	   = $true
