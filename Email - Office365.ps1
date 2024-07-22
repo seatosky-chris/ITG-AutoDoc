@@ -678,14 +678,14 @@ if ($LicenseFlexAssetName -and $LicenseFilterID -and $LicenseFilterID.id) {
 	$AllLicenses = Get-MgSubscribedSku
 	New-Item -ItemType Directory -Force -Path "C:\Temp" | Out-Null
 	Invoke-WebRequest -Uri "https://download.microsoft.com/download/e/3/e/e3e9faf2-f28b-490a-9ada-c6089a1fc5b0/Product%20names%20and%20service%20plan%20identifiers%20for%20licensing.csv" -OutFile "C:\Temp\O365LicenseTranslationTable.csv"
-	$LicenseTranslationTable = Import-CSV -Path "C:\Temp\O365LicenseTranslationTable.csv"
+	$FullLicenseTranslationTable = Import-CSV -Path "C:\Temp\O365LicenseTranslationTable.csv"
 
 	$LicensesCleaned = foreach ($License in $AllLicenses) {
 		if (($License.prepaidUnits.enabled - $License.prepaidUnits.suspended) -eq 0) {
 			continue
 		}
 		
-		$PrettyName = ($LicenseTranslationTable |  Where-Object {$_.GUID -eq $License.skuId } | Sort-Object Product_Display_Name -Unique).Product_Display_Name
+		$PrettyName = ($FullLicenseTranslationTable |  Where-Object {$_.GUID -eq $License.skuId } | Sort-Object Product_Display_Name -Unique).Product_Display_Name
 		[PSCustomObject]@{
 			'License Name'      = if ($PrettyName) { $PrettyName } else { $License.SkuPartNumber }
 			'Active Licenses'   = $License.prepaidUnits.enabled - $License.prepaidUnits.suspended
@@ -901,35 +901,37 @@ if ($LinkLicenseAsset -and $LicenseAsset -and $LicenseAsset.data.id -and $Existi
 $UserO365ReportUpdated = $false
 if ($UpdateO365Report -and $O365LicenseTypes_Primary) {
 	Write-Host "Exporting Office 365 license report..."
-	if (!$LicenseTranslationTable) {
+	if (!$FullLicenseTranslationTable) {
 		New-Item -ItemType Directory -Force -Path "C:\Temp" | Out-Null
 		Invoke-WebRequest -Uri "https://download.microsoft.com/download/e/3/e/e3e9faf2-f28b-490a-9ada-c6089a1fc5b0/Product%20names%20and%20service%20plan%20identifiers%20for%20licensing.csv" -OutFile "C:\Temp\O365LicenseTranslationTable.csv"
-		$LicenseTranslationTable = Import-CSV -Path "C:\Temp\O365LicenseTranslationTable.csv"
+		$FullLicenseTranslationTable = Import-CSV -Path "C:\Temp\O365LicenseTranslationTable.csv"
 	}
 
 	$LicenseList = @()
 	$AllUsers | ForEach-Object {
 		$LicenseSkus = $_.AssignedLicenses | Select-Object SkuId
-		$Licenses = @()
+		$Licenses = @{}
 		$LicenseSkus | ForEach-Object {
 			$sku = $_.SkuId
-			$PrettyName = ($LicenseTranslationTable |  Where-Object {$_.GUID -eq $sku } | Sort-Object Product_Display_Name -Unique).Product_Display_Name
-			$Licenses += $PrettyName
+			$License = ($FullLicenseTranslationTable |  Where-Object {$_.GUID -eq $sku } | Sort-Object Product_Display_Name -Unique)
+			$Licenses[$License.String_Id] = $License.Product_Display_Name
 		}
 
 		$UserInfo = [pscustomobject]@{
 			Name = $_.DisplayName
 			Email = $_.UserPrincipalName
 			PrimaryLicense = ""
-			AssignedLicenses = $Licenses
+			AssignedLicenses = @()
 		}
 
 		foreach ($PrimaryLicenseType in $O365LicenseTypes_Primary.GetEnumerator()) {
-			if ($PrimaryLicenseType.Value -in $Licenses) {
-				$UserInfo.PrimaryLicense = $PrimaryLicenseType.Value
+			if ($PrimaryLicenseType.Key -in $Licenses.Keys) {
+				$UserInfo.PrimaryLicense = $Licenses[$PrimaryLicenseType.Key]
 				break
 			}
 		}
+
+		$UserInfo.AssignedLicenses = @($Licenses.Values)
 
 		$LicenseList += $UserInfo
 	}
