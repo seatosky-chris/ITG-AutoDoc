@@ -4,7 +4,7 @@
 # Created Date: Friday, September 29th 2023, 4:58:10 pm
 # Author: Chris Jantzen
 # -----
-# Last Modified: Thu Jun 20 2024
+# Last Modified: Mon Jul 22 2024
 # Modified By: Chris Jantzen
 # -----
 # Copyright (c) 2023 Sea to Sky Network Solutions
@@ -408,6 +408,11 @@ if ($AzureADConnect_Server) {
 $ITGDomains = (Get-ITGlueDomains -page_size 1000 -organization_id $orgId).data
 $ITG_O365Domains = $ITGDomains | Where-Object { $_.attributes.name -in $Domains }
 
+if (!$ITG_O365Domains -or ($ITG_O365Domains | Measure-Object).Count -lt 1) {
+	Write-Error "No ITG domains were found that are connected to this O365 tenant. Adding or updating of this asset will not work. You must add at least one of the O365 domains to ITG's domains asset. O365 Domains: $($Domains -join ", ")"
+	exit 1
+}
+
 # Get connectors to look for custom inbound/outbound setups
 $MXRecords = $Domains | Where-Object { $_ -notlike "*.onmicrosoft.com" } | Resolve-DnsName -Type MX -ErrorAction Ignore | Where-Object { $_.QueryType -eq "MX" } | Select-Object NameExchange -ExpandProperty NameExchange | Sort-Object -Unique
 $InboundConnectors = Get-InboundConnector
@@ -432,6 +437,10 @@ if ($OutboundSmtpHost.length -gt 254 -and $DefaultDomain -notlike "*.onmicrosoft
 	$OutboundSmtpHost = $MXRecords_Filtered -join ", "
 }
 $OutboundSmtpHost = $OutboundSmtpHost.substring(0, [System.Math]::Min(254, $OutboundSmtpHost.Length))
+
+if (!$OutboundSmtpHost -and $ExistingFlexAsset -and $ExistingFlexAsset.attributes.traits.'outbound-smtp-host') {
+	$OutboundSmtpHost = $ExistingFlexAsset.attributes.traits.'outbound-smtp-host'.Trim()
+}
 
 if ($ExistingFlexAsset -and $ExistingFlexAsset.attributes.traits.'inbound-delivery') {
 	$InboundDelivery = $ExistingFlexAsset.attributes.traits.'inbound-delivery'
@@ -777,11 +786,11 @@ if (!$ExistingFlexAsset) {
 				'management-login'			= $ManagementLogin
 
 				'azure-ad-connect'			= $AzureADConnect
-				'azure-ad-connect-server'	= if ($ITG_AzureADConnect_Server) { @($ITG_AzureADConnect_Server.id) } else { @() }
+				'azure-ad-connect-server'	= @(if ($ITG_AzureADConnect_Server) { ($ITG_AzureADConnect_Server.id) })
 				'azure-ad-connect-scope-ad-groups' = $AzureADConnectADGroups
-				'azure-ad-connect-directory-sync-account' 	= if ($ITG_AzureADConnect_Accounts) { @($ITG_AzureADConnect_Accounts.id) } else { @() }
+				'azure-ad-connect-directory-sync-account' 	= @(if ($ITG_AzureADConnect_Accounts) { ($ITG_AzureADConnect_Accounts.id) })
 
-				'domain-s'					= if ($ITG_O365Domains) { @($ITG_O365Domains.id) } else { @() }
+				'domain-s'					= @(if ($ITG_O365Domains) { ($ITG_O365Domains.id) })
 				'default-domain'			= $DefaultDomain
 				'azure-tenant-id'			= $O365UnattendedLogin.TenantID
 				'inbound-delivery'			= $InboundDelivery
@@ -809,8 +818,7 @@ if (!$ExistingFlexAsset) {
 	if ($ExistingFlexAsset -and $ExistingFlexAsset.data) {
 		$ExistingFlexAsset = $ExistingFlexAsset.data
 	}
-}
-else {
+} else {
     Write-Host "Updating Flexible Asset"
 
 	$UpdatedFlexAssetBody = @{
@@ -824,17 +832,17 @@ else {
 
 				'management-url'			= if ($ExistingFlexAsset.attributes.traits.'management-url' -like "*admin.microsoft.com*") { $ExistingFlexAsset.attributes.traits.'management-url' } else { "https://admin.microsoft.com" }
 				'management-login'			= $ManagementLogin
-				'distribution-list-manager-approver' = if ($ExistingFlexAsset.attributes.traits.'distribution-list-manager-approver') { @($ExistingFlexAsset.attributes.traits.'distribution-list-manager-approver'.values.id) } else { @() }
+				'distribution-list-manager-approver' = @(if ($ExistingFlexAsset.attributes.traits.'distribution-list-manager-approver') { ($ExistingFlexAsset.attributes.traits.'distribution-list-manager-approver'.values.id) })
 
 				'azure-ad-connect'			= $AzureADConnect
-				'azure-ad-connect-server'	= if ($ITG_AzureADConnect_Server) { @($ITG_AzureADConnect_Server.id) } else { @() }
+				'azure-ad-connect-server'	= @(if ($ITG_AzureADConnect_Server) { ($ITG_AzureADConnect_Server.id) })
 				'azure-ad-connect-scope' 	= if ($ExistingFlexAsset.attributes.traits.'azure-ad-connect-scope') { $ExistingFlexAsset.attributes.traits.'azure-ad-connect-scope' } else { $false }
 				'azure-ad-connect-scope-ad-groups' = $AzureADConnectADGroups
-				'azure-ad-connect-directory-sync-account' 	= if ($ITG_AzureADConnect_Accounts) { @($ITG_AzureADConnect_Accounts.id) } else { @() }
+				'azure-ad-connect-directory-sync-account' 	= @(if ($ITG_AzureADConnect_Accounts) { ($ITG_AzureADConnect_Accounts.id) })
 
-				'domain-s'					= if ($ITG_O365Domains) { @($ITG_O365Domains.id) } else { @() }
+				'domain-s'					= @(if ($ITG_O365Domains) { ($ITG_O365Domains.id) })
 				'default-domain'			= $DefaultDomain
-				'email-servers'				= if ($ExistingFlexAsset.attributes.traits.'email-servers') { @($ExistingFlexAsset.attributes.traits.'email-servers'.values.id) } else { @() }
+				'email-servers'				= @(if ($ExistingFlexAsset.attributes.traits.'email-servers') { ($ExistingFlexAsset.attributes.traits.'email-servers'.values.id) })
 				'azure-tenant-id'			= $O365UnattendedLogin.TenantID
 				'inbound-delivery'			= $InboundDelivery
 				'inbound-pop-imap-host' 	= if ($ExistingFlexAsset.attributes.traits.'inbound-pop-imap-host') { $ExistingFlexAsset.attributes.traits.'inbound-pop-imap-host' } else { $false }
@@ -848,22 +856,22 @@ else {
 
 				'anti-spam-technology'		= $AntiSpam
 				'anti-spam-details' 		= if ($ExistingFlexAsset.attributes.traits.'anti-spam-details') { $ExistingFlexAsset.attributes.traits.'anti-spam-details' } else { $false }
-				'anti-spam-management-login' = if ($ExistingFlexAsset.attributes.traits.'anti-spam-management-login') { @($ExistingFlexAsset.attributes.traits.'anti-spam-management-login'.values.id) } else { @() }
+				'anti-spam-management-login' = @(if ($ExistingFlexAsset.attributes.traits.'anti-spam-management-login') { ($ExistingFlexAsset.attributes.traits.'anti-spam-management-login'.values.id) })
 
 				'pst-export-location' 		= if ($ExistingFlexAsset.attributes.traits.'pst-export-location') { $ExistingFlexAsset.attributes.traits.'pst-export-location' } else { $false }
-				'export-location-file-store' = if ($ExistingFlexAsset.attributes.traits.'export-location-file-store') { @($ExistingFlexAsset.attributes.traits.'export-location-file-store'.values.id) } else { @() }
+				'export-location-file-store' = @(if ($ExistingFlexAsset.attributes.traits.'export-location-file-store') { ($ExistingFlexAsset.attributes.traits.'export-location-file-store'.values.id) })
 				'backup-solution'			= $BackupSolution
 
-				'creating-accounts' 		= if ($ExistingFlexAsset.attributes.traits.'creating-accounts') { @($ExistingFlexAsset.attributes.traits.'creating-accounts'.values.id) } else { @() }
-				'disabling-removing-accounts' = if ($ExistingFlexAsset.attributes.traits.'disabling-removing-accounts') { @($ExistingFlexAsset.attributes.traits.'disabling-removing-accounts'.values.id) } else { @() }
-				'creating-shared-mailboxes' = if ($ExistingFlexAsset.attributes.traits.'creating-shared-mailboxes') { @($ExistingFlexAsset.attributes.traits.'creating-shared-mailboxes'.values.id) } else { @() }
-				'creating-distribution-lists' = if ($ExistingFlexAsset.attributes.traits.'creating-distribution-lists') { @($ExistingFlexAsset.attributes.traits.'creating-distribution-lists'.values.id) } else { @() }
-				'computer-email-client-setup' = if ($ExistingFlexAsset.attributes.traits.'computer-email-client-setup') { @($ExistingFlexAsset.attributes.traits.'computer-email-client-setup'.values.id) } else { @() }
-				'mobile-phone-setup' 		= if ($ExistingFlexAsset.attributes.traits.'mobile-phone-setup') { @($ExistingFlexAsset.attributes.traits.'mobile-phone-setup'.values.id) } else { @() }
-				'spam-filter-management' 	= if ($ExistingFlexAsset.attributes.traits.'spam-filter-management') { @($ExistingFlexAsset.attributes.traits.'spam-filter-management'.values.id) } else { @() }
-				'outbound-smtp-setup' 		= if ($ExistingFlexAsset.attributes.traits.'outbound-smtp-setup') { @($ExistingFlexAsset.attributes.traits.'outbound-smtp-setup'.values.id) } else { @() }
+				'creating-accounts' 		= @(if ($ExistingFlexAsset.attributes.traits.'creating-accounts') { ($ExistingFlexAsset.attributes.traits.'creating-accounts'.values.id) })
+				'disabling-removing-accounts' = @(if ($ExistingFlexAsset.attributes.traits.'disabling-removing-accounts') { ($ExistingFlexAsset.attributes.traits.'disabling-removing-accounts'.values.id) })
+				'creating-shared-mailboxes' = @(if ($ExistingFlexAsset.attributes.traits.'creating-shared-mailboxes') { ($ExistingFlexAsset.attributes.traits.'creating-shared-mailboxes'.values.id) })
+				'creating-distribution-lists' = @(if ($ExistingFlexAsset.attributes.traits.'creating-distribution-lists') { ($ExistingFlexAsset.attributes.traits.'creating-distribution-lists'.values.id) })
+				'computer-email-client-setup' = @(if ($ExistingFlexAsset.attributes.traits.'computer-email-client-setup') { ($ExistingFlexAsset.attributes.traits.'computer-email-client-setup'.values.id) })
+				'mobile-phone-setup' 		= @(if ($ExistingFlexAsset.attributes.traits.'mobile-phone-setup') { ($ExistingFlexAsset.attributes.traits.'mobile-phone-setup'.values.id) })
+				'spam-filter-management' 	= @(if ($ExistingFlexAsset.attributes.traits.'spam-filter-management') { ($ExistingFlexAsset.attributes.traits.'spam-filter-management'.values.id) })
+				'outbound-smtp-setup' 		= @(if ($ExistingFlexAsset.attributes.traits.'outbound-smtp-setup') { ($ExistingFlexAsset.attributes.traits.'outbound-smtp-setup'.values.id) })
 
-				'additional-details'		= if ($ExistingFlexAsset.attributes.traits.'additional-details') { $ExistingFlexAsset.attributes.traits.'additional-details' | Out-String } else { "" }
+				'additional-details'		= if ($ExistingFlexAsset.attributes.traits.'additional-details') { ($ExistingFlexAsset.attributes.traits.'additional-details' | Out-String).Trim() } else { "" }
 			}
 		}
 	}
