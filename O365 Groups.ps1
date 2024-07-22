@@ -657,15 +657,20 @@ function UpdateGroupAsset {
 			$RelatedContact = $RelatedContacts | Select-Object -First 1
 			
 			if ($RelatedContact) {
-				$RelatedItemsBody =
-				@{
-					type = 'related_items'
-					attributes = @{
-						'destination_id' = $RelatedContact.id
-						'destination_type' = "Contact"
+				$ExistingGroup_WithRelated = Get-ITGlueFlexibleAssets -id $ExistingGroup.id -include "related_items"
+				$ExistingRelatedContacts = $ExistingGroup_WithRelated.included | Where-Object { $_.type -eq "related-items" -and $_.attributes.'asset-type' -eq "contact" }
+
+				if (($ExistingRelatedContacts | Measure-Object).Count -gt 0 -and $RelatedContact.id -notin $ExistingRelatedContacts.attributes.'resource-id') {
+					$RelatedItemsBody =
+					@{
+						type = 'related_items'
+						attributes = @{
+							'destination_id' = $RelatedContact.id
+							'destination_type' = "Contact"
+						}
 					}
+					New-ITGlueRelatedItems -resource_type 'flexible_assets' -resource_id $ExistingGroup.id -data $RelatedItemsBody
 				}
-				New-ITGlueRelatedItems -resource_type 'flexible_assets' -resource_id $ExistingGroup.id -data $RelatedItemsBody
 			}
 		}
 	}
