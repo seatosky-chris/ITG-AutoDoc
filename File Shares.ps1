@@ -140,6 +140,12 @@ If (Get-Module -ListAvailable -Name "GroupPolicy") {
 
 # Get this servers configuration ID for tagging
 $ServerAsset = (Get-ITGlueConfigurations -page_size "1000" -filter_name $ENV:COMPUTERNAME -organization_id $orgID).data
+if (($ServerAsset | Measure-Object).Count -gt 1) {
+	$ServerAsset_Temp = $ServerAsset | Where-Object { !$_.attributes.archived }
+	if (($ServerAsset_Temp | Measure-Object).Count -gt 0) {
+		$ServerAsset = $ServerAsset_Temp
+	}
+}
 
 # Loop through each share and get permissions then update ITG
 $i = 0
@@ -240,7 +246,7 @@ foreach ($SMBShare in $AllSmbShares) {
 	$DenyGroups = $ExistingGroups | Where-Object { $_.attributes.traits."group-name" -in $DenyAccounts.Name }
 
 	# Get existing asset to update (if one exists)
-	$ExistingShare = $ExistingShares | Where-Object { $_.attributes.traits."disk-path-on-server" -eq $DiskPath -and $_.attributes.traits.servers.values.id -contains $Servers[0] -and $_.attributes.traits."share-type" -eq "Windows File Share" } | Select-Object -First 1
+	$ExistingShare = $ExistingShares | Where-Object { $_.attributes.traits."disk-path-on-server" -eq $DiskPath -and $_.attributes.traits.servers.values.id -in $Servers -and $_.attributes.traits."share-type" -eq "Windows File Share" } | Select-Object -First 1
 	# If the Asset does not exist, create a new asset, if it does exist we'll combine the old and the new
 	if (!$ExistingShare) {
 		Write-Progress -Activity "Updating Shares" -PercentComplete $PercentComplete -Status ("Working - " + $PercentComplete + "%  (Updating share '$($ShareName)' - Creating new asset)")
