@@ -226,7 +226,7 @@ foreach ($SMBShare in $AllSmbShares) {
 	(get-item $PermissionsBackupFileLoc).Attributes += 'Hidden'
 	
 	# Get existing asset to update (if one exists)
-	$ExistingShare = $ExistingShares | Where-Object { $_.attributes.traits."disk-path-on-server" -eq $DiskPath -and $_.attributes.traits.servers.values.id -in $Servers -and $_.attributes.traits."share-type" -eq "Windows File Share" } | Select-Object -First 1
+	$ExistingShare = $ExistingShares | Where-Object { $_.attributes.traits."disk-path-on-server" -eq $DiskPath -and ($_.attributes.traits.servers.values.id | Where-Object { $_ -in $Servers} | Measure-Object).Count -gt 0 -and $_.attributes.traits."share-type" -eq "Windows File Share" } | Select-Object -First 1
 	# If the Asset does not exist, create a new asset, if it does exist we'll combine the old and the new
 	if (!$ExistingShare) {
 		Write-Progress -Activity "Updating Shares" -PercentComplete $PercentComplete -Status ("Working - " + $PercentComplete + "%  (Updating share '$($ShareName)' - Creating new asset)")
