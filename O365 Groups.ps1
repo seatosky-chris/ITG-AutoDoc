@@ -726,6 +726,9 @@ foreach ($Group in $SharedMailboxes) {
 
 Write-Progress -Activity "Updating Groups" -Status "Ready" -Completed
 
+Disconnect-ExchangeOnline -Confirm:$false
+Write-Host "Disconnected from O365."
+
 # Update / Create the "Scripts - Last Run" ITG page which shows when this AutoDoc (and other scripts) last ran
 if ($LastUpdatedUpdater_APIURL -and $orgID) {
     $Headers = @{

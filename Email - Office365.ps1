@@ -4,7 +4,7 @@
 # Created Date: Friday, September 29th 2023, 4:58:10 pm
 # Author: Chris Jantzen
 # -----
-# Last Modified: Mon Jul 22 2024
+# Last Modified: Thu Jan 30 2025
 # Modified By: Chris Jantzen
 # -----
 # Copyright (c) 2023 Sea to Sky Network Solutions
@@ -14,6 +14,7 @@
 # HISTORY:
 # Date      	By	Comments
 # ----------	---	----------------------------------------------------------
+# 2025-01-30	CJ	Added disconnecting of Exchange-OnlineManagment module to prevent build-up of temporary files
 # 2024-06-04	CJ	Fixing office 365 overview not including license info due to special characters being appended to the start of the licensing translation csv.
 ###
 
@@ -1080,6 +1081,9 @@ if ($UpdateO365Report -and $O365LicenseTypes_Primary) {
 		$UserO365ReportUpdated = $true
 	}
 }
+
+Disconnect-ExchangeOnline -Confirm:$false
+Write-Host "Disconnected from O365."
 
 # Update / Create the "Scripts - Last Run" ITG page which shows when this AutoDoc (and other scripts) last ran
 if ($LastUpdatedUpdater_APIURL -and $orgID) {
