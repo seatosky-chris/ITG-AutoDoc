@@ -4,7 +4,7 @@
 # Created Date: Friday, September 29th 2023, 4:58:10 pm
 # Author: Chris Jantzen
 # -----
-# Last Modified: Thu Jan 30 2025
+# Last Modified: Tue Mar 25 2025
 # Modified By: Chris Jantzen
 # -----
 # Copyright (c) 2023 Sea to Sky Network Solutions
@@ -14,6 +14,7 @@
 # HISTORY:
 # Date      	By	Comments
 # ----------	---	----------------------------------------------------------
+# 2025-03-25	CJ	Replacing AzureAD calls with MS Graph as the AzureAD module is now deprecated
 # 2025-01-30	CJ	Added disconnecting of Exchange-OnlineManagment module to prevent build-up of temporary files
 # 2024-06-04	CJ	Fixing office 365 overview not including license info due to special characters being appended to the start of the licensing translation csv.
 ###
@@ -90,16 +91,6 @@ Add-ITGlueAPIKey $APIKEy
 
 # Connect to Office 365 and Azure
 Write-Host "Connecting to Office 365..."
-If (Get-Module -ListAvailable -Name "AzureAD") {
-	Import-Module AzureAD
-} else {
-	Install-Module -Name AzureAD
-}
-if ($O365UnattendedLogin -and $O365UnattendedLogin.AppId) {
-	Connect-AzureAD -CertificateThumbprint $O365UnattendedLogin.CertificateThumbprint -ApplicationId $O365UnattendedLogin.AppID -TenantId $O365UnattendedLogin.TenantId
-} else {
-	Connect-AzureAD -AccountID $O365LoginUser
-}
 
 $GraphModules = (Get-Module -ListAvailable).Name | Where-Object { $_ -like "Microsoft.Graph*" }
 If ("Microsoft.Graph" -in $GraphModules -or ("Microsoft.Graph.Users" -in $GraphModules -and "Microsoft.Graph.Identity.SignIns" -in $GraphModules -and "Microsoft.Graph.Identity.DirectoryManagement" -in $GraphModules)) {
@@ -148,12 +139,12 @@ if (!$OrganizationInfo -or !$OrganizationInfo.data -or !$FilterID -or !$CustomOv
 }
 
 # Get Tenant details and domains (for matching the email asset and/or updating the domains in the asset)
-$TenantDetails = Get-AzureADTenantDetail
+$TenantDetails = Get-MgOrganization
 $Domains = $TenantDetails.VerifiedDomains.Name | Sort-Object -Unique
-$DefaultDomain = ($TenantDetails.VerifiedDomains | Where-Object { $_._Default }).Name
+$DefaultDomain = ($TenantDetails.VerifiedDomains | Where-Object { $_.IsDefault }).Name
 
 # Get users and mailboxes
-$AllUsers = Get-AzureADUser -All $true
+$AllUsers = Get-MgUser -All -Property Id, UserPrincipalName, Mail, DisplayName, GivenName, Surname, AssignedLicenses | Select-Object Id, UserPrincipalName, Mail, DisplayName, GivenName, Surname, AssignedLicenses
 $AllUserMailboxes = Get-Mailbox -RecipientTypeDetails UserMailbox -ResultSize unlimited
 
 # Get the existing asset if one exists
@@ -276,7 +267,7 @@ if (!$ExistingFlexAsset -or !$ExistingFlexAsset.attributes.traits.'management-lo
 }
 
 # Get AD sync info
-$AzureADConnect = if ($TenantDetails.DirSyncEnabled) { "Yes" } else { "No" }
+$AzureADConnect = if ($TenantDetails.OnPremisesSyncEnabled) { "Yes" } else { "No" }
 if ($ExistingFlexAsset -and $ExistingFlexAsset.attributes.traits.'azure-ad-connect' -and $ExistingFlexAsset.attributes.traits.'azure-ad-connect' -like "Yes*") {
 	$AzureADConnect = $ExistingFlexAsset.attributes.traits.'azure-ad-connect'
 }
@@ -307,13 +298,17 @@ if ($AzureADConnect -like "Yes*") {
 		$AzureADConnect_Accounts = Get-ADUser -LDAPFilter "(description=*configured to synchronize to tenant*)" -Properties Description
 	}	
 	if (!$AzureADConnect_Accounts) {
-		$AzureADConnect_Accounts = Get-AzureADDirectoryRole | Where-Object { $_.DisplayName -eq "Directory Synchronization Accounts" } | Get-AzureADDirectoryRoleMember
+		$AzureADConnect_Accounts = @()
+		$DirRole = Get-MgDirectoryRole | Where-Object { $_.DisplayName -eq "Directory Synchronization Accounts" }
+		if ($DirRole) {
+			$AzureADConnect_Accounts = Get-MgDirectoryRoleMember -DirectoryRoleId $DirRole.Id
+		}
 	}
 	if ($AzureADConnect_Accounts) {
 		if ($AzureADConnect_Accounts.Description) {
 			$AzureADConnect_Server += $AzureADConnect_Accounts | Foreach-Object { $_.description.SubString(142, $_.description.IndexOf(" ", 142) - 142)}
-		} elseif ($AzureADConnect_Accounts.UserPrincipalName -contains "_") {
-			$AzureADConnect_Server += $AzureADConnect_Accounts | ForEach-Object { $_.UserPrincipalName.split("_")[1] }
+		} elseif ($AzureADConnect_Accounts.AdditionalProperties.userPrincipalName -like "*_*") {
+			$AzureADConnect_Server += $AzureADConnect_Accounts | ForEach-Object { $_.AdditionalProperties.userPrincipalName.split("_")[1] }
 		}
 
 		if (($AzureADConnect_Server | Measure-Object).Count -gt 1) {
@@ -336,14 +331,14 @@ foreach ($AzureADConnect_Account in @($AzureADConnect_Accounts)) {
 		$PossibleUsernames += $AzureADConnect_Account.SamAccountName
 		$PossibleUsernames += "Sync_*_$($AccountIdentifier)@*"
 		$PossibleUsernames += "AAD_*_$($AccountIdentifier)@*"
-	} elseif ($AzureADConnect_Account.UserPrincipalName) {
-		$ITG_AzureADConnect_Accounts += $ITGPasswords | Where-Object { $_.attributes.name -like "*$($AzureADConnect_Account.UserPrincipalName)*" -or $_.attributes.name -like "*$($AzureADConnect_Account.UserPrincipalName.split("@")[0])*" -or $_.attributes.username -like "*$($AzureADConnect_Account.UserPrincipalName)*" -or $_.attributes.username -like "*$($AzureADConnect_Account.UserPrincipalName.split("@")[0])*" }
-		if ($AzureADConnect_Account.UserPrincipalName -match "(Sync|AAD)_[\w\s-]+_([\w|\d]+)@.+" -and $Matches[2]) {
+	} elseif ($AzureADConnect_Account.AdditionalProperties.userPrincipalName) {
+		$ITG_AzureADConnect_Accounts += $ITGPasswords | Where-Object { $_.attributes.name -like "*$($AzureADConnect_Account.AdditionalProperties.userPrincipalName)*" -or $_.attributes.name -like "*$($AzureADConnect_Account.AdditionalProperties.userPrincipalName.split("@")[0])*" -or $_.attributes.username -like "*$($AzureADConnect_Account.AdditionalProperties.userPrincipalName)*" -or $_.attributes.username -like "*$($AzureADConnect_Account.AdditionalProperties.userPrincipalName.split("@")[0])*" }
+		if ($AzureADConnect_Account.AdditionalProperties.userPrincipalName -match "(Sync|AAD)_[\w\s-]+_([\w|\d]+)@.+" -and $Matches[2]) {
 			$AccountIdentifier = $Matches[2]
 			$ITG_AzureADConnect_Accounts += $ITGPasswords | Where-Object { $_.attributes.username -like "*MSOL_$($AccountIdentifier)*" }
 		}
-		$PossibleUsernames += $AzureADConnect_Account.UserPrincipalName
-		$PossibleUsernames += $AzureADConnect_Account.UserPrincipalName.split("@")[0]
+		$PossibleUsernames += $AzureADConnect_Account.AdditionalProperties.userPrincipalName
+		$PossibleUsernames += $AzureADConnect_Account.AdditionalProperties.userPrincipalName.split("@")[0]
 		$PossibleUsernames += "MSOL_$($AccountIdentifier)"
 	}
 }

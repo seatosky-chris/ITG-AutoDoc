@@ -42,15 +42,22 @@ Add-ITGlueAPIKey $APIKEy
 
 # Connect to Office 365 and Azure
 Write-Host "Connecting to Office 365..."
-If (Get-Module -ListAvailable -Name "AzureAD") {
-	Import-Module AzureAD
+
+$GraphModules = (Get-Module -ListAvailable).Name | Where-Object { $_ -like "Microsoft.Graph*" }
+If ("Microsoft.Graph" -in $GraphModules -or ("Microsoft.Graph.Users" -in $GraphModules -and "Microsoft.Graph.Identity.SignIns" -in $GraphModules -and "Microsoft.Graph.Identity.DirectoryManagement" -in $GraphModules)) {
+	Import-Module Microsoft.Graph.Users
+	Import-Module Microsoft.Graph.Identity.SignIns
+	Import-Module Microsoft.Graph.Identity.DirectoryManagement
 } else {
-	Install-Module -Name AzureAD
+	Install-Module -Name Microsoft.Graph.Authentication
+	Install-Module -Name Microsoft.Graph.Users
+	Install-Module Microsoft.Graph.Identity.SignIns
+	Install-Module Microsoft.Graph.Identity.DirectoryManagement
 }
 if ($O365UnattendedLogin -and $O365UnattendedLogin.AppId) {
-	Connect-AzureAD -CertificateThumbprint $O365UnattendedLogin.CertificateThumbprint -ApplicationId $O365UnattendedLogin.AppID -TenantId $O365UnattendedLogin.TenantId
+	Connect-MgGraph -CertificateThumbprint $O365UnattendedLogin.CertificateThumbprint -ClientID $O365UnattendedLogin.AppID -TenantId $O365UnattendedLogin.TenantId -NoWelcome
 } else {
-	Connect-AzureAD -AccountID $O365LoginUser
+	Connect-MgGraph
 }
 
 If (Get-Module -ListAvailable -Name "ExchangeOnlineManagement") {
@@ -159,8 +166,8 @@ if ($ADGroupsFilterID) {
 }
 
 # Get O365 tenant info
-$TenantDetails = Get-AzureADTenantDetail
-$DefaultDomain = ($TenantDetails.VerifiedDomains | Where-Object { $_._Default }).Name
+$TenantDetails = Get-MgOrganization
+$DefaultDomain = ($TenantDetails.VerifiedDomains | Where-Object { $_.IsDefault }).Name
 $O365TenantFlexAsset = (Get-ITGlueFlexibleAssets -filter_flexible_asset_type_id $Email_FilterID.id -filter_organization_id $orgID).data | Where-Object { $_.attributes.traits.'type' -eq "Office 365" -and $_.attributes.traits.'default-domain' -eq $DefaultDomain }
 if (($O365TenantFlexAsset | Measure-Object).Count -gt 1) {
 	$O365TenantFlexAsset = $O365TenantFlexAsset | Sort-Object -Property {$_.attributes.'updated-at'} -Descending | Select-Object -First 1
@@ -171,34 +178,26 @@ if ($O365TenantFlexAsset) {
 }
 
 # Get disabled accounts, unlicensed accounts, and guests to add extra data to tables
-$DisabledAccounts = Get-AzureADUser -Filter "AccountEnabled eq false" | Select-Object -ExpandProperty UserPrincipalName
-$UnlicensedUsers = Get-AzureADUser | Where-Object {
-	$licensed = $false
-	for ($i = 0; $i -le ($_.AssignedLicenses | Measure-Object).Count ; $i++) { 
-		if ([string]::IsNullOrEmpty($_.AssignedLicenses[$i].SkuId) -ne $true) { 
-			$licensed = $true 
-		} 
-	} 
-	if ($licensed -eq $false) { 
-		return $true
-	} else {
-		return $false
-	}
-} | Select-Object DisplayName, UserPrincipalName, @{N="FirstName"; E={$_."GivenName"}}, @{N="LastName"; E={$_."Surname"}}, @{N="Title"; E={$_."JobTitle"}}
-$GuestUsers = Get-AzureADUser -Filter "UserType eq 'Guest'" | Select-Object DisplayName, UserPrincipalName, @{N="FirstName"; E={$_."GivenName"}}, @{N="LastName"; E={$_."Surname"}}, @{N="Title"; E={$_."JobTitle"}}
+$DisabledAccounts = Get-MgUser -All -Filter 'accountEnabled eq false' | Select-Object -ExpandProperty UserPrincipalName
+$UnlicensedUsers = Get-MgUser -All -Filter 'assignedLicenses/$count eq 0' -ConsistencyLevel eventual -CountVariable licensedUserCount -Property Id, UserPrincipalName, DisplayName, GivenName, Surname, JobTitle, AssignedLicenses, Licenses | 
+	Select-Object DisplayName, UserPrincipalName, @{N="FirstName"; E={$_."GivenName"}}, @{N="LastName"; E={$_."Surname"}}, @{N="Title"; E={$_."JobTitle"}}
+$GuestUsers = Get-MgUser -Filter "userType eq 'Guest'" -All | Select-Object DisplayName, UserPrincipalName, @{N="FirstName"; E={$_."GivenName"}}, @{N="LastName"; E={$_."Surname"}}, @{N="Title"; E={$_."JobTitle"}}
+$AllMgUsers = Get-MgUser -All -Property Id, DisplayName, UserPrincipalName, AccountEnabled, JobTitle, UserType, AssignedLicenses | Select-Object Id, DisplayName, UserPrincipalName, AccountEnabled, JobTitle, UserType, AssignedLicenses
 
 # Get all groups
-$Microsoft365Groups = Get-AzureADMSGroup -Filter "groupTypes/any(c:c eq 'Unified')" -All $true
-$DistributionLists = Get-DistributionGroup -ResultSize Unlimited -RecipientTypeDetails MailUniversalDistributionGroup
-$MailSecurityGroups = Get-AzureADGroup -Filter "SecurityEnabled eq true and MailEnabled eq true"
-$SecurityGroups = Get-AzureADGroup -Filter "SecurityEnabled eq true and MailEnabled eq false" | Where-Object { !$_.DirSyncEnabled }
-$SharedMailboxes = Get-Mailbox -Filter {RecipientTypeDetails -eq "SharedMailbox"} -ResultSize Unlimited
+$Microsoft365Groups = @(Get-MgGroup -Filter "groupTypes/any(c:c eq 'Unified')" -All)
+$DistributionLists = @(Get-DistributionGroup -ResultSize Unlimited -RecipientTypeDetails MailUniversalDistributionGroup)
+$MailSecurityGroups = @(Get-MgGroup -Filter "SecurityEnabled eq true and MailEnabled eq true" -All)
+$SecurityGroups = @(Get-MgGroup -Filter "SecurityEnabled eq true and MailEnabled eq false" -All | Where-Object { !$_.OnPremisesSyncEnabled })
+$SharedMailboxes = @(Get-Mailbox -Filter {RecipientTypeDetails -eq "SharedMailbox"} -ResultSize Unlimited)
 
 # Get group members and add to above lists
 foreach ($Group in $Microsoft365Groups) {
-	$Group | Add-Member -MemberType NoteProperty -Name Members -Value @()
-	$GroupMembers = Get-AzureADGroupMember -ObjectId $Group.Id -All $true
-	foreach ($User in $GroupMembers) {
+	$Group | Add-Member -MemberType NoteProperty -Name Members -Value @() -Force
+	$Group.Members = @()
+	$GroupMembers = @(Get-MgGroupMember -GroupId $Group.Id -All)
+	foreach ($Member in $GroupMembers) {
+		$User = $AllMgUsers | Where-Object { $_.Id -eq $Member.Id }
 		$Group.Members += New-Object PSObject -property $([ordered]@{ 
 			UserName = $User.DisplayName
 			UserPrincipalName  = $User.UserPrincipalName
@@ -209,9 +208,11 @@ foreach ($Group in $Microsoft365Groups) {
 		})
 	}
 
-	$Group | Add-Member -MemberType NoteProperty -Name Owners -Value @()
-	$GroupOwners = Get-AzureADGroupOwner -ObjectId $Group.Id -All $true
-	foreach ($User in $GroupOwners) {
+	$Group | Add-Member -MemberType NoteProperty -Name Owners -Value @() -Force
+	$Group.Owners = @()
+	$GroupOwners = @(Get-MgGroupOwner -GroupId $Group.Id -All)
+	foreach ($Owner in $GroupOwners) {
+		$User = $AllMgUsers | Where-Object { $_.Id -eq $Owner.Id }
 		$Group.Owners += New-Object PSObject -property $([ordered]@{ 
 			UserName = $User.DisplayName
 			UserPrincipalName  = $User.UserPrincipalName
@@ -253,9 +254,11 @@ foreach ($DL in $DistributionLists) {
 
 $MailSecurityGroups_Owners = Get-DistributionGroup -RecipientTypeDetails MailUniversalSecurityGroup | Select-Object DisplayName,PrimarySmtpAddress,ManagedBy
 foreach ($Group in $MailSecurityGroups) {
-	$Group | Add-Member -MemberType NoteProperty -Name Members -Value @()
-	$GroupMembers = Get-AzureADGroupMember -ObjectId $Group.ObjectId -All $true
-	foreach ($User in $GroupMembers) {
+	$Group | Add-Member -MemberType NoteProperty -Name Members -Value @() -Force
+	$Group.Members = @()
+	$GroupMembers = @(Get-MgGroupMember -GroupId $Group.Id -All)
+	foreach ($Member in $GroupMembers) {
+		$User = $AllMgUsers | Where-Object { $_.Id -eq $Member.Id }
 		$Group.Members += New-Object PSObject -property $([ordered]@{ 
 			UserName = $User.DisplayName
 			UserPrincipalName  = $User.UserPrincipalName
@@ -266,7 +269,8 @@ foreach ($Group in $MailSecurityGroups) {
 		})
 	}
 
-	$Group | Add-Member -MemberType NoteProperty -Name Owners -Value @()
+	$Group | Add-Member -MemberType NoteProperty -Name Owners -Value @() -Force
+	$Group.Owners = @()
 	$Owners = $MailSecurityGroups_Owners | Where-Object { $_.PrimarySmtpAddress -eq $Group.Mail }
 	foreach ($User in $Owners.ManagedBy) {
 		$UserDetails = Get-Recipient $User
@@ -282,9 +286,11 @@ foreach ($Group in $MailSecurityGroups) {
 }
 
 foreach ($Group in $SecurityGroups) {
-	$Group | Add-Member -MemberType NoteProperty -Name Members -Value @()
-	$GroupMembers = Get-AzureADGroupMember -ObjectId $Group.ObjectId -All $true
-	foreach ($User in $GroupMembers) {
+	$Group | Add-Member -MemberType NoteProperty -Name Members -Value @() -Force
+	$Group.Members = @()
+	$GroupMembers = @(Get-MgGroupMember -GroupId $Group.Id -All)
+	foreach ($Member in $GroupMembers) {
+		$User = $AllMgUsers | Where-Object { $_.Id -eq $Member.Id }
 		$Group.Members += New-Object PSObject -property $([ordered]@{ 
 			UserName = $User.DisplayName
 			UserPrincipalName  = $User.UserPrincipalName
@@ -295,9 +301,11 @@ foreach ($Group in $SecurityGroups) {
 		})
 	}
 
-	$Group | Add-Member -MemberType NoteProperty -Name Owners -Value @()
-	$GroupOwners = Get-AzureADGroupOwner -ObjectId $Group.ObjectId -All $true
-	foreach ($User in $GroupOwners) {
+	$Group | Add-Member -MemberType NoteProperty -Name Owners -Value @() -Force
+	$Group.Owners = @()
+	$GroupOwners = @(Get-MgGroupOwner -GroupId $Group.Id -All)
+	foreach ($Owner in $GroupOwners) {
+		$User = $AllMgUsers | Where-Object { $_.Id -eq $Owner.Id }
 		$Group.Owners += New-Object PSObject -property $([ordered]@{ 
 			UserName = $User.DisplayName
 			UserPrincipalName  = $User.UserPrincipalName
@@ -404,11 +412,11 @@ function UpdateGroupAsset {
 		$EmailAddress = $Group.PrimarySmtpAddress
 		$Description = $Group.Description
 	} elseif ($GroupType -eq 'Mail-enabled Security') {
-		$GroupID = $Group.ObjectId
+		$GroupID = $Group.Id
 		$EmailAddress = $Group.Mail
 		$Description = $Group.Description
 	} elseif ($GroupType -eq 'Security') {
-		$GroupID = $Group.ObjectId
+		$GroupID = $Group.Id
 		$EmailAddress = $Group.Mail
 		$Description = $Group.Description
 	} elseif ($GroupType -eq 'Shared Mailbox') {
@@ -416,7 +424,9 @@ function UpdateGroupAsset {
 		$EmailAddress = $Group.PrimarySmtpAddress
 		$Description = ""
 	}
-	$Description = $Description[0..254] -join "" # limit to 255 chars
+	if ($Description) {
+		$Description = $Description[0..254] -join "" # limit to 255 chars
+	}
 
 	if ($UpdateOnly) {
 		if ($GroupID -notin $ExistingGroupIdentifiers.ObjectID -and $GroupName -notin $ExistingGroupIdentifiers."group-name" -and (!$EmailAddress -or $EmailAddress -notin $ExistingGroupIdentifiers."email-address")) {
@@ -507,7 +517,7 @@ function UpdateGroupAsset {
 	if ($AllADGroups) {
 		if (($GroupType -eq 'Microsoft 365 Group' -and $Group.OnPremisesSyncEnabled) -or
 			($GroupType -eq 'Distribution List' -and $Group.IsDirSynced) -or
-			($GroupType -eq 'Mail-enabled Security' -and $Group.DirSyncEnabled)) 
+			($GroupType -eq 'Mail-enabled Security' -and $Group.OnPremisesSyncEnabled)) 
 		{
 			$ADGroups = @($AllADGroups | Where-Object { $_.attributes.traits."group-name" -like $GroupName } | Select-Object -ExpandProperty id)
 		}
