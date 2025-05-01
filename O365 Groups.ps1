@@ -44,13 +44,15 @@ Add-ITGlueAPIKey $APIKEy
 Write-Host "Connecting to Office 365..."
 
 $GraphModules = (Get-Module -ListAvailable).Name | Where-Object { $_ -like "Microsoft.Graph*" }
-If ("Microsoft.Graph" -in $GraphModules -or ("Microsoft.Graph.Users" -in $GraphModules -and "Microsoft.Graph.Identity.SignIns" -in $GraphModules -and "Microsoft.Graph.Identity.DirectoryManagement" -in $GraphModules)) {
+If ("Microsoft.Graph" -in $GraphModules -or ("Microsoft.Graph.Users" -in $GraphModules -and "Microsoft.Graph.Identity.SignIns" -in $GraphModules -and "Microsoft.Graph.Identity.DirectoryManagement" -in $GraphModules -and "Microsoft.Graph.Groups" -in $GraphModules)) {
 	Import-Module Microsoft.Graph.Users
+	Import-Module Microsoft.Graph.Groups
 	Import-Module Microsoft.Graph.Identity.SignIns
 	Import-Module Microsoft.Graph.Identity.DirectoryManagement
 } else {
 	Install-Module -Name Microsoft.Graph.Authentication
 	Install-Module -Name Microsoft.Graph.Users
+	Install-Module -Name Microsoft.Graph.Groups
 	Install-Module Microsoft.Graph.Identity.SignIns
 	Install-Module Microsoft.Graph.Identity.DirectoryManagement
 }
